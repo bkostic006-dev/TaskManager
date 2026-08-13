@@ -1,0 +1,849 @@
+<!DOCTYPE html>
+<!--
+  TALLY — Dashboard state gallery. Static mockup: no JS, no build step.
+  Opens straight from the filesystem. Sections are stacked, labelled, full-width.
+
+  ─────────────────────────────────────────────────────────────────────────────
+  WHY A RIGHT DRAWER, NOT A MODAL (section 04)
+  ─────────────────────────────────────────────────────────────────────────────
+  Editing a task is a comparison job: you re-word a title against its neighbours,
+  you push a due date because of what sits above it. A centred modal covers
+  exactly the rows you are reasoning about; a 420px right drawer leaves the list
+  and the numeral spine visible, so the row you are editing keeps its place and
+  its number (the drawer title repeats it: "04 · Edit task"). The form is six
+  short fields — it never needs modal width. Same component handles create and
+  edit, and it degrades to a full-height sheet at 360px where a modal would
+  have to become one anyway. Create opens the same drawer with empty fields and
+  the title "New task".
+
+  ─────────────────────────────────────────────────────────────────────────────
+  NUMBERS USED THROUGHOUT — keep these consistent when wiring real data
+  ─────────────────────────────────────────────────────────────────────────────
+  47 tasks total · 31 pending · 16 done · 8 per page · 6 pages · page 1 shown.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tally — Dashboard states</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Big+Shoulders+Display:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --mist:#EEF1F1; --card:#FBFCFC; --ink:#14262A; --slate:#596E72;
+    --teal:#2F4C56; --teal-dark:#253D45; --teal-soft:#E9EEEF;
+    --brass:#8A6410; --brass-soft:#F6EFDC; --brass-edge:#E6D6A8;
+    --edge:#D6DCDD; --edge-strong:#BDC7C8; --numeral:#77898C; --row-done:#F4F7F7;
+    --r-sm:6px; --r-md:10px; --r-lg:14px;
+    --sh-xs:0 1px 2px rgba(20,38,42,.06);
+    --sh-sm:0 2px 6px rgba(20,38,42,.09);
+    --sh-md:0 10px 28px -8px rgba(20,38,42,.20);
+    --display:'Big Shoulders Display','Arial Narrow',Haettenschweiler,sans-serif;
+    --body:'Atkinson Hyperlegible',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    --t:box-shadow 120ms ease,border-color 120ms ease,background-color 120ms ease,color 120ms ease;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:var(--body); font-size:14px; line-height:1.5; color:var(--ink);
+    background:var(--mist); -webkit-font-smoothing:antialiased; text-wrap:pretty;
+  }
+  a{color:var(--teal); font-weight:700; text-decoration:underline; text-underline-offset:2px}
+  a:hover{color:var(--teal-dark)}
+  :focus-visible,.is-focused{outline:2px solid var(--teal); outline-offset:2px}
+  button{font-family:var(--body)}
+
+  /* ── app chrome ────────────────────────────────────────────── */
+  .appbar{
+    background:var(--card); border-bottom:1px solid var(--edge); height:64px;
+    display:flex; align-items:center; gap:32px; padding:0 32px; position:relative; z-index:5;
+  }
+  .wordmark{font-family:var(--display); font-weight:700; font-size:24px; line-height:1; letter-spacing:.06em; text-transform:uppercase}
+  .nav{display:flex; gap:24px; align-items:center; height:100%}
+  .nav a{
+    display:flex; align-items:center; height:100%; font-size:13.5px; font-weight:700;
+    text-decoration:none; color:var(--slate); border-bottom:2px solid transparent; transition:var(--t);
+  }
+  .nav a:hover{color:var(--ink)}
+  .nav a[aria-current]{color:var(--teal); border-bottom-color:var(--teal)}
+  .appbar-right{margin-left:auto; display:flex; align-items:center; gap:14px}
+  .avatar{
+    width:30px; height:30px; border-radius:var(--r-md); background:var(--teal-soft); color:var(--teal);
+    display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700;
+  }
+
+  /* ── gallery scaffolding ───────────────────────────────────── */
+  .page{max-width:1180px; margin:0 auto; padding:36px 32px 72px}
+  .hero{display:flex; align-items:flex-end; justify-content:space-between; gap:24px; margin-bottom:36px}
+  h1{font-family:var(--display); font-weight:600; font-size:30px; line-height:1.1; letter-spacing:.01em; margin:0}
+  .hero p{margin:4px 0 0; font-size:13.5px; color:var(--slate)}
+  .count{display:flex; align-items:baseline; gap:10px}
+  .count b{font-family:var(--display); font-weight:700; font-size:44px; line-height:1; font-variant-numeric:tabular-nums}
+  .count span{font-size:12px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--slate)}
+
+  section.state{margin-bottom:36px}
+  .state-label{display:flex; align-items:baseline; gap:10px; margin-bottom:12px}
+  .state-label b{font-family:var(--display); font-weight:600; font-size:22px; line-height:1; letter-spacing:.02em; color:var(--teal); font-variant-numeric:tabular-nums}
+  .state-label span{font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--slate)}
+  .spec{
+    margin:12px 0 0; padding:10px 0 0; border-top:1px solid var(--edge);
+    font-size:12px; line-height:1.55; color:var(--slate);
+  }
+  .spec b{color:var(--ink)}
+
+  /* ── surfaces ──────────────────────────────────────────────── */
+  .paper{background:var(--card); border:1px solid var(--edge); border-radius:var(--r-md); box-shadow:var(--sh-xs)}
+
+  /* ── toolbar ───────────────────────────────────────────────── */
+  .toolbar{display:flex; align-items:center; gap:10px; padding:14px 16px; margin-bottom:16px; flex-wrap:wrap}
+  .search{position:relative; width:280px}
+  .search input{
+    width:100%; height:36px; padding:0 12px 0 32px; font-family:var(--body); font-size:14px; color:var(--ink);
+    background:var(--card); border:1px solid var(--edge); border-radius:var(--r-md); transition:var(--t);
+  }
+  .search input::placeholder{color:var(--slate); opacity:.8}
+  .search input:hover{border-color:var(--edge-strong)}
+  .search input:focus-visible{border-color:var(--teal)}
+  .search .glass{
+    position:absolute; left:11px; top:50%; transform:translateY(-50%); width:12px; height:12px;
+    border:1.6px solid var(--slate); border-radius:50%;
+  }
+  .search .glass::after{content:""; position:absolute; right:-4px; bottom:-3px; width:5px; height:1.6px; background:var(--slate); transform:rotate(45deg)}
+  .seg{display:flex; background:var(--mist); border:1px solid var(--edge); border-radius:var(--r-md); padding:2px; gap:2px}
+  .seg button{
+    height:30px; padding:0 13px; border:0; background:transparent; border-radius:8px;
+    font-size:12.5px; font-weight:700; color:var(--slate); cursor:pointer; transition:var(--t);
+  }
+  .seg button:hover{color:var(--ink)}
+  .seg button[aria-pressed="true"]{background:var(--teal); color:var(--card)}
+  .select{
+    display:inline-flex; align-items:center; gap:8px; height:36px; padding:0 11px;
+    background:var(--card); border:1px solid var(--edge); border-radius:var(--r-md);
+    font-size:13.5px; color:var(--ink); cursor:pointer; transition:var(--t);
+  }
+  .select:hover{border-color:var(--edge-strong)}
+  .select .lab{color:var(--slate)}
+  .select .caret{width:0; height:0; border-left:4px solid transparent; border-right:4px solid transparent; border-top:5px solid var(--slate); margin-left:2px}
+  .btn{
+    display:inline-flex; align-items:center; justify-content:center; gap:8px; height:36px; padding:0 16px;
+    border-radius:var(--r-md); border:1px solid transparent; font-size:13.5px; font-weight:700;
+    cursor:pointer; transition:var(--t); text-decoration:none;
+  }
+  .btn--primary{background:var(--teal); color:var(--card)}
+  .btn--primary:hover{background:var(--teal-dark)}
+  .btn--default{background:var(--card); border-color:var(--edge); color:var(--ink)}
+  .btn--default:hover{border-color:var(--edge-strong); background:var(--mist)}
+  .btn--subtle{background:transparent; color:var(--teal)}
+  .btn--subtle:hover{background:var(--teal-soft)}
+  .btn--danger{background:transparent; color:var(--brass)}
+  .btn--danger:hover{background:var(--brass-soft)}
+  .btn .plus{font-size:15px; line-height:1; margin-top:-1px}
+  .push{margin-left:auto}
+
+  /* ── task rows: the numeral spine ──────────────────────────── */
+  .list{display:flex; flex-direction:column; gap:8px}
+  .row{
+    display:grid; grid-template-columns:44px 22px 1fr auto 78px 118px 30px; gap:14px;
+    align-items:center; min-height:48px; padding:0 16px;
+    background:var(--card); border:1px solid var(--edge); border-radius:var(--r-md);
+    box-shadow:var(--sh-xs); transition:var(--t);
+  }
+  .row:hover{box-shadow:var(--sh-sm); border-color:var(--edge-strong)}
+  .row:hover .idx{color:var(--ink)}
+  .idx{
+    font-family:var(--display); font-weight:600; font-size:30px; line-height:1;
+    font-variant-numeric:tabular-nums; color:var(--numeral); text-align:right; transition:var(--t);
+  }
+  .mark{
+    width:28px; height:28px; margin-left:16px; border-radius:var(--r-sm); background:var(--ink);
+    color:var(--card); display:flex; align-items:center; justify-content:center; font-size:16px; font-weight:700;
+  }
+  .cb{width:16px; height:16px; margin:0; accent-color:var(--teal); cursor:pointer}
+  .title{margin:0; font-size:14px; line-height:1.35}
+  .meta{margin:2px 0 0; font-size:12.5px; color:var(--slate); font-variant-numeric:tabular-nums}
+  .chips{display:flex; gap:6px}
+  .chip{
+    display:inline-flex; align-items:center; height:20px; padding:0 7px; border-radius:var(--r-sm);
+    background:var(--teal-soft); color:var(--teal);
+    font-size:10.5px; font-weight:700; letter-spacing:.08em; text-transform:uppercase;
+  }
+  .badge{
+    display:inline-flex; align-items:center; height:22px; padding:0 10px; border-radius:999px;
+    font-size:10.5px; font-weight:700; letter-spacing:.08em; text-transform:uppercase;
+  }
+  .badge--pending{background:var(--mist); color:var(--slate); border:1px solid var(--edge)}
+  .badge--done{background:var(--teal-soft); color:var(--teal)}
+  .badge--late{background:var(--brass-soft); color:var(--brass)}
+  .due{font-size:12.5px; color:var(--slate); font-variant-numeric:tabular-nums; text-align:right}
+  .due b{display:block; font-weight:400}
+  .due--late b{color:var(--brass); font-weight:700}
+  .due .late-tag{display:inline-flex; margin-top:3px; height:18px; padding:0 6px; border-radius:var(--r-sm);
+    background:var(--brass-soft); color:var(--brass); font-size:10px; font-weight:700; letter-spacing:.07em; text-transform:uppercase}
+  .kebab{
+    width:30px; height:30px; border:0; background:transparent; border-radius:var(--r-md);
+    color:var(--slate); font-size:17px; line-height:1; cursor:pointer; transition:var(--t);
+  }
+  .kebab:hover{background:var(--mist); color:var(--ink)}
+  .row--done{background:var(--row-done); box-shadow:none}
+  .row--done .title{color:var(--slate); text-decoration:line-through; text-decoration-thickness:1px}
+  .row--done .meta{color:var(--slate)}
+  .row--hover{box-shadow:var(--sh-sm); border-color:var(--edge-strong)}
+  .row--hover .idx{color:var(--ink)}
+
+  /* ── pagination ────────────────────────────────────────────── */
+  .pager{display:flex; align-items:center; gap:16px; padding:14px 16px; margin-top:16px; flex-wrap:wrap}
+  .pager .range{font-size:12.5px; color:var(--slate); font-variant-numeric:tabular-nums}
+  .pages{display:flex; gap:6px; align-items:center}
+  .pages button{
+    min-width:34px; height:34px; padding:0 6px; border:1px solid var(--edge); background:var(--card);
+    border-radius:var(--r-md); font-family:var(--display); font-weight:600; font-size:18px; line-height:1;
+    color:var(--ink); font-variant-numeric:tabular-nums; cursor:pointer; transition:var(--t);
+  }
+  .pages button:hover{border-color:var(--edge-strong); background:var(--mist)}
+  .pages button[aria-current]{background:var(--teal); border-color:var(--teal); color:var(--card)}
+  .pages .step{font-family:var(--body); font-size:13px; font-weight:700; color:var(--slate)}
+  .pages .step[disabled]{opacity:.45; cursor:not-allowed}
+
+  /* ── token legend ─────────────────────────────────────────── */
+  .tokens{padding:22px 24px 24px; margin-bottom:36px}
+  .tk-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(238px,1fr)); gap:26px 32px}
+  .tk h4{
+    margin:0 0 12px; padding-bottom:8px; border-bottom:1px solid var(--edge);
+    font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--slate);
+  }
+  .sw{display:flex; align-items:center; gap:10px; margin-bottom:9px; font-size:12.5px; line-height:1.35}
+  .sw i{flex:0 0 auto; width:26px; height:26px; border-radius:var(--r-sm); border:1px solid var(--edge)}
+  .sw b{font-weight:700}
+  .sw span{color:var(--slate); font-variant-numeric:tabular-nums}
+  .tk-row{display:flex; align-items:baseline; gap:10px; margin-bottom:9px; font-size:12.5px; color:var(--slate)}
+  .tk-row b{color:var(--ink); font-weight:700; min-width:104px}
+  .tk-scale{display:flex; align-items:flex-end; gap:10px; margin-bottom:12px}
+  .tk-scale i{background:var(--teal-soft); border-radius:2px; display:block}
+  .tk-sh{height:34px; border-radius:var(--r-md); background:var(--card); border:1px solid var(--edge); margin-bottom:12px}
+
+  /* ── numeral-spine anatomy ────────────────────────────────── */
+  .anatomy{display:grid; grid-template-columns:minmax(320px,1fr) minmax(300px,.85fr); gap:28px; align-items:start; padding:22px 24px 24px}
+  .an-stack{display:flex; flex-direction:column; gap:8px}
+  .an-note{display:flex; gap:10px; font-size:12.5px; color:var(--slate); line-height:1.5; margin-bottom:11px}
+  .an-note b{
+    flex:0 0 auto; width:19px; height:19px; border-radius:50%; background:var(--teal-soft); color:var(--teal);
+    font-family:var(--display); font-size:12px; font-weight:600; display:flex; align-items:center; justify-content:center; margin-top:2px;
+  }
+  .an-note em{color:var(--ink); font-style:normal; font-weight:700}
+  .an-caption{font-size:11px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--slate); margin:0 0 8px}
+  .anno{position:relative}
+  .legend{list-style:none; margin:14px 0 0; padding:0; display:grid; grid-template-columns:repeat(2,1fr); gap:8px 28px}
+  .legend li{display:flex; gap:9px; font-size:12.5px; color:var(--slate); line-height:1.45}
+  .legend b{
+    flex:0 0 auto; width:18px; height:18px; border-radius:50%; background:var(--teal-soft); color:var(--teal);
+    font-family:var(--display); font-size:12px; font-weight:600; display:flex; align-items:center; justify-content:center; margin-top:1px;
+  }
+  .legend em{color:var(--ink); font-style:normal; font-weight:700}
+
+  /* ── drawer composition ───────────────────────────────────── */
+  .viewport{position:relative; overflow:hidden; height:600px; border:1px solid var(--edge); border-radius:var(--r-lg); background:var(--mist)}
+  .viewport-inner{padding:16px; filter:saturate(.9)}
+  .scrim{position:absolute; inset:0; background:rgba(20,38,42,.35)}
+  .drawer{
+    position:absolute; top:0; right:0; bottom:0; width:420px; background:var(--card);
+    box-shadow:var(--sh-md); display:flex; flex-direction:column;
+  }
+  .drawer-head{display:flex; align-items:center; gap:10px; padding:16px 20px; border-bottom:1px solid var(--edge)}
+  .drawer-head .n{font-family:var(--display); font-weight:600; font-size:24px; line-height:1; color:var(--numeral); font-variant-numeric:tabular-nums}
+  .drawer-head h3{font-family:var(--display); font-weight:600; font-size:24px; line-height:1; letter-spacing:.01em; margin:0}
+  .drawer-head .x{margin-left:auto; width:28px; height:28px; border:0; background:transparent; border-radius:var(--r-md); color:var(--slate); font-size:15px; cursor:pointer}
+  .drawer-head .x:hover{background:var(--mist); color:var(--ink)}
+  .drawer-body{padding:20px; overflow:auto; flex:1}
+  .drawer-foot{display:flex; align-items:center; gap:10px; padding:16px 20px; border-top:1px solid var(--edge)}
+  .field{margin-bottom:16px}
+  .field label{display:block; font-size:12.5px; font-weight:700; margin-bottom:6px}
+  .control{
+    width:100%; height:38px; padding:0 12px; font-family:var(--body); font-size:14px; color:var(--ink);
+    background:var(--card); border:1px solid var(--edge); border-radius:var(--r-md); transition:var(--t);
+  }
+  textarea.control{height:auto; min-height:84px; padding:10px 12px; line-height:1.5; resize:vertical}
+  .control:hover{border-color:var(--edge-strong)}
+  .control:focus-visible{border-color:var(--teal)}
+  .multi{display:flex; align-items:center; gap:6px; min-height:38px; padding:6px 10px; flex-wrap:wrap;
+    background:var(--card); border:1px solid var(--edge); border-radius:var(--r-md)}
+  .multi .ph{font-size:13px; color:var(--slate)}
+  .hint{margin:6px 0 0; font-size:12.5px; color:var(--slate)}
+
+  /* ── skeleton ─────────────────────────────────────────────── */
+  .sk{background:var(--mist); border-radius:var(--r-sm); display:block}
+  .sk--num{width:30px; height:26px; margin-left:14px; border-radius:var(--r-sm)}
+
+  /* ── empty states ─────────────────────────────────────────── */
+  .empty{display:flex; flex-direction:column; align-items:center; text-align:center; padding:46px 24px 50px}
+  .figure{
+    font-family:var(--display); font-weight:700; font-size:132px; line-height:.86; letter-spacing:.02em;
+    color:var(--edge); font-variant-numeric:tabular-nums; margin-bottom:14px; user-select:none;
+  }
+  .empty h3{font-family:var(--display); font-weight:600; font-size:26px; line-height:1.15; letter-spacing:.01em; margin:0 0 8px}
+  .empty p{margin:0 0 20px; font-size:13.5px; color:var(--slate); max-width:44ch}
+  .empty .actions{display:flex; gap:10px}
+
+  /* ── toasts ───────────────────────────────────────────────── */
+  .toasts{display:flex; gap:16px; flex-wrap:wrap}
+  .toast{
+    display:flex; gap:12px; align-items:flex-start; width:380px; padding:14px 16px;
+    background:var(--card); border:1px solid var(--edge); border-radius:var(--r-lg); box-shadow:var(--sh-md);
+  }
+  .toast-mark{
+    flex:0 0 auto; width:22px; height:22px; border-radius:var(--r-sm); color:var(--card);
+    display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; margin-top:1px;
+  }
+  .toast--ok .toast-mark{background:var(--teal)}
+  .toast--err{border-color:var(--brass-edge)}
+  .toast--err .toast-mark{background:var(--brass)}
+  .toast h4{margin:0 0 2px; font-size:14px; font-weight:700}
+  .toast p{margin:0; font-size:12.5px; color:var(--slate); line-height:1.45}
+  .toast .x{margin-left:auto; border:0; background:transparent; color:var(--slate); font-size:14px; cursor:pointer; border-radius:var(--r-sm)}
+  .toast .retry{margin-top:10px}
+
+  /* ── mobile frame ─────────────────────────────────────────── */
+  .phone{
+    width:360px; border:1px solid var(--edge-strong); border-radius:var(--r-lg);
+    background:var(--mist); box-shadow:var(--sh-md); overflow:hidden;
+  }
+  .phone-bar{display:flex; align-items:center; height:52px; padding:0 16px; background:var(--card); border-bottom:1px solid var(--edge)}
+  .phone-bar .wordmark{font-size:20px}
+  .phone-body{padding:12px}
+  .phone .search{width:100%; margin-bottom:8px}
+  .phone .seg{width:100%; margin-bottom:12px}
+  .phone .seg button{flex:1}
+  .m-row{
+    display:grid; grid-template-columns:38px 20px 1fr; gap:12px; align-items:center;
+    min-height:66px; padding:10px 12px; margin-bottom:8px;
+    background:var(--card); border:1px solid var(--edge); border-radius:var(--r-md); box-shadow:var(--sh-xs);
+  }
+  .m-row .idx{font-size:26px}
+  .m-row .mark{width:26px; height:26px; margin-left:12px; font-size:14px}
+  .m-row .title{font-size:13.5px}
+  .m-row .m-meta{display:flex; align-items:center; gap:6px; margin-top:4px; flex-wrap:wrap}
+  .phone-foot{padding:12px; background:var(--card); border-top:1px solid var(--edge)}
+  .phone-foot .btn{width:100%; height:44px}
+</style>
+</head>
+<body>
+
+<header class="appbar">
+  <div class="wordmark">Tally</div>
+  <div class="appbar-right">
+    <button type="button" class="btn btn--default" style="height:30px;padding:0 12px;font-size:12.5px">Log out</button>
+    <span style="font-size:12.5px;color:var(--slate)">Northbay</span>
+    <span class="avatar" aria-hidden="true">DK</span>
+  </div>
+</header>
+
+<main class="page">
+
+  <div class="hero">
+    <div>
+      <h1>Tasks</h1>
+      <p>31 pending · 16 done</p>
+    </div>
+    <div class="count"><b>47</b><span>tasks</span></div>
+  </div>
+
+  <!-- ═══ 00 TOKEN LEGEND ══════════════════════════════════════ -->
+  <section class="state">
+    <div class="state-label"><b>00</b><span>Tokens — the whole system on one surface</span></div>
+
+    <div class="paper tokens">
+      <div class="tk-grid">
+
+        <div class="tk">
+          <h4>Color</h4>
+          <div class="sw"><i style="background:var(--mist)"></i><span><b>mist</b> #EEF1F1<br>app background</span></div>
+          <div class="sw"><i style="background:var(--card)"></i><span><b>card</b> #FBFCFC<br>every surface</span></div>
+          <div class="sw"><i style="background:var(--ink)"></i><span><b>ink</b> #14262A<br>primary text · 13.9:1</span></div>
+          <div class="sw"><i style="background:var(--slate)"></i><span><b>slate</b> #596E72<br>secondary text · 5.3:1</span></div>
+          <div class="sw"><i style="background:var(--teal)"></i><span><b>teal</b> #2F4C56<br>interactive · white 9.0:1</span></div>
+          <div class="sw"><i style="background:var(--brass)"></i><span><b>brass</b> #8A6410<br>lateness only · 5.3:1</span></div>
+          <div class="sw"><i style="background:var(--numeral)"></i><span><b>numeral</b> #77898C<br>row index · 3.6:1 at 24pt</span></div>
+        </div>
+
+        <div class="tk">
+          <h4>Type</h4>
+          <div style="font-family:var(--display);font-weight:600;font-size:34px;line-height:1;letter-spacing:.01em">Big Shoulders 0123456789</div>
+          <p class="tk-row" style="margin:6px 0 16px"><span>Display. Numerals, wordmark, titles. Never below 20px.</span></p>
+          <div style="font-size:16px">Atkinson Hyperlegible 0123456789</div>
+          <p class="tk-row" style="margin:6px 0 16px"><span>Body. Legible at 13px in dense rows; 400 and 700 only.</span></p>
+          <div class="tk-row"><b>Hero count</b><span>display 44 / 700</span></div>
+          <div class="tk-row"><b>Row numeral</b><span>display 30 / 600</span></div>
+          <div class="tk-row"><b>Page title</b><span>display 30 / 600</span></div>
+          <div class="tk-row"><b>Row title</b><span>body 14 / 400</span></div>
+          <div class="tk-row"><b>Meta · date</b><span>body 12.5 / 400 tabular</span></div>
+          <div class="tk-row"><b>Label · chip</b><span>body 11 / 700 · .12em caps</span></div>
+        </div>
+
+        <div class="tk">
+          <h4>Spacing · radius</h4>
+          <div class="tk-scale">
+            <i style="width:6px;height:6px"></i><i style="width:10px;height:10px"></i><i style="width:16px;height:16px"></i><i style="width:24px;height:24px"></i><i style="width:36px;height:36px"></i>
+          </div>
+          <div class="tk-row"><b>xs–xl</b><span>6 · 10 · 16 · 24 · 36</span></div>
+          <div class="tk-row"><b>row gap</b><span>8, always</span></div>
+          <div class="tk-row"><b>row height</b><span>48 compact · 60 comfortable</span></div>
+          <div class="tk-row"><b>section gap</b><span>36, always</span></div>
+          <div class="tk-scale" style="margin-top:16px">
+            <i style="width:30px;height:30px;border-radius:6px;background:var(--mist);border:1px solid var(--edge)"></i>
+            <i style="width:30px;height:30px;border-radius:10px;background:var(--mist);border:1px solid var(--edge)"></i>
+            <i style="width:30px;height:30px;border-radius:14px;background:var(--mist);border:1px solid var(--edge)"></i>
+          </div>
+          <div class="tk-row"><b>sm · md · lg</b><span>6 chips · 10 default · 14 panels</span></div>
+          <div class="tk-row"><b>pill</b><span>status badge only</span></div>
+        </div>
+
+        <div class="tk">
+          <h4>Shadow · motion</h4>
+          <div class="tk-sh" style="box-shadow:var(--sh-xs)"></div>
+          <div class="tk-row"><b>xs</b><span>0 1px 2px / .06 — resting rows</span></div>
+          <div class="tk-sh" style="box-shadow:var(--sh-sm)"></div>
+          <div class="tk-row"><b>sm</b><span>0 2px 6px / .09 — row hover</span></div>
+          <div class="tk-sh" style="box-shadow:var(--sh-md)"></div>
+          <div class="tk-row"><b>md</b><span>0 10px 28px -8px / .20 — drawer, toasts</span></div>
+          <div class="tk-row" style="margin-top:14px"><b>transition</b><span>120ms ease on shadow, border, background, color</span></div>
+          <div class="tk-row"><b>focus ring</b><span>2px teal, offset 2 — never removed</span></div>
+        </div>
+
+      </div>
+    </div>
+
+    <p class="spec">Three shadow levels, three radii, two families, six named colors, one accent. Anything a new screen needs is here; if it isn't here, it doesn't get invented locally. Contrast figures are measured against <b>card #FBFCFC</b>.</p>
+  </section>
+
+  <!-- ═══ 00b NUMERAL SPINE ════════════════════════════════════ -->
+  <section class="state">
+    <div class="state-label"><b>00</b><span>Signature — anatomy of the numeral spine</span></div>
+
+    <div class="paper anatomy">
+      <div>
+        <p class="an-caption">Pending, resting · hovered · completed</p>
+        <div class="an-stack">
+          <article class="row">
+            <div class="idx" aria-hidden="true">06</div>
+            <input class="cb" type="checkbox" aria-label="Mark “Replace the hand-rolled date parser” complete">
+            <div><p class="title">Replace the hand-rolled date parser</p><p class="meta">Added Aug 7 · Marcus L</p></div>
+            <div class="chips"><span class="chip">API</span></div>
+            <span class="badge badge--pending">Pending</span>
+            <div class="due"><b>Aug 20</b></div>
+            <button class="kebab" type="button" aria-label="More actions for task 06">⋯</button>
+          </article>
+          <article class="row row--hover">
+            <div class="idx" aria-hidden="true">07</div>
+            <input class="cb" type="checkbox" aria-label="Mark “Rewrite the pagination docs for long lists” complete">
+            <div><p class="title">Rewrite the pagination docs for long lists</p><p class="meta">Added Aug 7 · Marcus L</p></div>
+            <div class="chips"><span class="chip">Docs</span></div>
+            <span class="badge badge--pending">Pending</span>
+            <div class="due"><b>Aug 21</b></div>
+            <button class="kebab" type="button" aria-label="More actions for task 07">⋯</button>
+          </article>
+          <article class="row row--done">
+            <div class="mark" aria-hidden="true">✓</div>
+            <input class="cb" type="checkbox" checked aria-label="Mark “Turn on the weekly digest for shared lists” incomplete">
+            <div><p class="title">Turn on the weekly digest for shared lists</p><p class="meta">Completed Aug 9 · Priya S</p></div>
+            <div class="chips"><span class="chip">Billing</span></div>
+            <span class="badge badge--done">Done</span>
+            <div class="due"><b>Aug 9</b></div>
+            <button class="kebab" type="button" aria-label="More actions">⋯</button>
+          </article>
+        </div>
+      </div>
+
+      <div>
+        <p class="an-caption">What the gutter does</p>
+        <div class="an-note"><b>1</b><span><em>44px gutter, right-aligned numeral.</em> Display face 32/600, tabular figures so 07 and 47 occupy identical width and the left edge never ripples.</span></div>
+        <div class="an-note"><b>2</b><span><em>Colour is value, not hue.</em> #77898C at 22.5pt clears AA large-text (3.6:1); scale carries the personality, lightness keeps the 14px title on top of the hierarchy.</span></div>
+        <div class="an-note"><b>3</b><span><em>Hover moves the numeral, not the row.</em> Numeral → ink, shadow xs → sm, border → edge-strong. No transform, no lift, no scale. The accent is too close to the neutrals to carry hover, so value does it.</span></div>
+        <div class="an-note"><b>4</b><span><em>Completion replaces the glyph.</em> 28px <strong>ink</strong> square with a check occupies the same cell — deliberately not the accent, so "done" never reads as "clickable". A shape change readable before colour, plus strikethrough and the word Done.</span></div>
+        <div class="an-note"><b>5</b><span><em>The number is the address.</em> "Row 04" is sayable in a screenshare, and the edit drawer repeats it in its header so the row keeps its place.</span></div>
+        <div class="an-note"><b>6</b><span><em>Same face, four scales.</em> 132px empty-state figure · 44px hero count · 30px row index · 18px page numbers. One idea, applied four times.</span></div>
+      </div>
+    </div>
+
+    <p class="spec">The one loud thing in the product. Everything around it is one text weight, flat surfaces, and a single accent — that contrast is what makes the numerals read as intent rather than decoration. Build it as a grid column, not a pseudo-element: it has to hold a check square too.</p>
+  </section>
+
+  <!-- ═══ 01 DEFAULT ═══════════════════════════════════════════ -->
+  <section class="state">
+    <div class="state-label"><b>01</b><span>Default — task list, page 1 of 6</span></div>
+
+    <div class="paper toolbar">
+      <div class="search"><span class="glass" aria-hidden="true"></span><input type="search" placeholder="Search tasks" aria-label="Search tasks"></div>
+      <div class="seg" role="group" aria-label="Filter by status">
+        <button type="button" aria-pressed="true">All</button>
+        <button type="button" aria-pressed="false">Pending</button>
+        <button type="button" aria-pressed="false">Completed</button>
+      </div>
+      <button type="button" class="select"><span class="lab">Sort</span> Due date <span class="caret" aria-hidden="true"></span></button>
+      <button type="button" class="btn btn--primary push"><span class="plus" aria-hidden="true">+</span> New task</button>
+    </div>
+
+    <div class="list">
+      <article class="row">
+        <div class="idx" aria-hidden="true">01</div>
+        <input class="cb" type="checkbox" aria-label="Mark “Ship rate-limit headers on /v1/tasks” complete">
+        <div><p class="title">Ship rate-limit headers on /v1/tasks</p><p class="meta">Added Aug 4 · Dana K · 2 notes</p></div>
+        <div class="chips"><span class="chip">API</span></div>
+        <span class="badge badge--pending">Pending</span>
+        <div class="due"><b>Aug 13</b></div>
+        <button class="kebab" type="button" aria-label="More actions for task 01">⋯</button>
+      </article>
+
+      <article class="row row--done">
+        <div class="mark" aria-hidden="true">✓</div>
+        <input class="cb" type="checkbox" checked aria-label="Mark “Write the migration for task_labels” incomplete">
+        <div><p class="title">Write the migration for task_labels</p><p class="meta">Completed Aug 11 · Priya S</p></div>
+        <div class="chips"><span class="chip">Infra</span></div>
+        <span class="badge badge--done">Done</span>
+        <div class="due"><b>Aug 11</b></div>
+        <button class="kebab" type="button" aria-label="More actions for “Write the migration for task_labels”">⋯</button>
+      </article>
+
+      <article class="row row--hover">
+        <div class="idx" aria-hidden="true">03</div>
+        <input class="cb" type="checkbox" aria-label="Mark “Fix the duplicate toast on rapid save” complete">
+        <div><p class="title">Fix the duplicate toast on rapid save</p><p class="meta">Added Aug 6 · Dana K</p></div>
+        <div class="chips"><span class="chip">API</span></div>
+        <span class="badge badge--pending">Pending</span>
+        <div class="due"><b>Aug 14</b></div>
+        <button class="kebab" type="button" aria-label="More actions for task 03">⋯</button>
+      </article>
+
+      <article class="row">
+        <div class="idx" aria-hidden="true">04</div>
+        <input class="cb" type="checkbox" aria-label="Mark “Audit focus order in the task drawer” complete">
+        <div><p class="title">Audit focus order in the task drawer</p><p class="meta">Added Jul 29 · Priya S · 1 note</p></div>
+        <div class="chips"><span class="chip">A11y</span></div>
+        <span class="badge badge--pending">Pending</span>
+        <div class="due due--late"><b>Aug 8</b><span class="late-tag">Overdue</span></div>
+        <button class="kebab" type="button" aria-label="More actions for task 04">⋯</button>
+      </article>
+
+      <article class="row row--done">
+        <div class="mark" aria-hidden="true">✓</div>
+        <input class="cb" type="checkbox" checked aria-label="Mark “Cut cold start on the search worker” incomplete">
+        <div><p class="title">Cut cold start on the search worker</p><p class="meta">Completed Aug 10 · Dana K</p></div>
+        <div class="chips"><span class="chip">Infra</span></div>
+        <span class="badge badge--done">Done</span>
+        <div class="due"><b>Aug 10</b></div>
+        <button class="kebab" type="button" aria-label="More actions for “Cut cold start on the search worker”">⋯</button>
+      </article>
+
+      <article class="row">
+        <div class="idx" aria-hidden="true">06</div>
+        <input class="cb" type="checkbox" aria-label="Mark “Replace the hand-rolled date parser” complete">
+        <div><p class="title">Replace the hand-rolled date parser</p><p class="meta">Added Aug 7 · Marcus L</p></div>
+        <div class="chips"><span class="chip">API</span></div>
+        <span class="badge badge--pending">Pending</span>
+        <div class="due"><b>Aug 20</b></div>
+        <button class="kebab" type="button" aria-label="More actions for task 06">⋯</button>
+      </article>
+
+      <article class="row">
+        <div class="idx" aria-hidden="true">07</div>
+        <input class="cb" type="checkbox" aria-label="Mark “Rewrite the pagination docs for long lists” complete">
+        <div><p class="title">Rewrite the pagination docs for long lists</p><p class="meta">Added Aug 7 · Marcus L</p></div>
+        <div class="chips"><span class="chip">Docs</span></div>
+        <span class="badge badge--pending">Pending</span>
+        <div class="due"><b>Aug 21</b></div>
+        <button class="kebab" type="button" aria-label="More actions for task 07">⋯</button>
+      </article>
+
+      <article class="row row--done">
+        <div class="mark" aria-hidden="true">✓</div>
+        <input class="cb" type="checkbox" checked aria-label="Mark “Turn on the weekly digest for shared lists” incomplete">
+        <div><p class="title">Turn on the weekly digest for shared lists</p><p class="meta">Completed Aug 9 · Priya S</p></div>
+        <div class="chips"><span class="chip">Billing</span></div>
+        <span class="badge badge--done">Done</span>
+        <div class="due"><b>Aug 9</b></div>
+        <button class="kebab" type="button" aria-label="More actions for “Turn on the weekly digest for shared lists”">⋯</button>
+      </article>
+    </div>
+
+    <p class="spec"><b>The signature.</b> Row grid <code>44px 22px 1fr auto 78px 118px 30px</code>, gap 14, min-height 48 (compact — the shipped default). The index numeral is Big Shoulders Display 30/600 in <b>#77898C</b> — 3.6:1 at 22.5pt, above the AA large-text floor — and darkens to <b>ink</b> on row hover (row 03 is shown hovered): in a near-monochrome palette the hover cue has to be value, not hue. Completed rows swap the numeral for a filled <b>ink</b> check square, tint to <b>#F4F7F7</b>, drop their shadow, strike the title, and carry the word <b>Done</b>: three non-color channels before color does any work. Overdue is the only other place <b>brass</b> appears.</p>
+  </section>
+
+  <!-- ═══ 02 TOOLBAR ═══════════════════════════════════════════ -->
+  <section class="state">
+    <div class="state-label"><b>02</b><span>Toolbar — search, filter, sort, new task</span></div>
+
+    <div class="paper toolbar" style="margin-bottom:0">
+      <div class="search"><span class="glass" aria-hidden="true"></span><input type="search" value="rate limit" aria-label="Search tasks"></div>
+      <div class="seg" role="group" aria-label="Filter by status">
+        <button type="button" aria-pressed="false">All</button>
+        <button type="button" aria-pressed="true">Pending</button>
+        <button type="button" aria-pressed="false">Completed</button>
+      </div>
+      <button type="button" class="select"><span class="lab">Sort</span> Recently added <span class="caret" aria-hidden="true"></span></button>
+      <button type="button" class="btn btn--primary push is-focused"><span class="plus" aria-hidden="true">+</span> New task</button>
+    </div>
+
+    <ul class="legend">
+      <li><b>1</b><span><em>Search</em> — 280px <code>TextInput</code>, magnifier in <code>leftSection</code>. Filters on keystroke; a filled query shows a clear button and the count in the hero drops to matches.</span></li>
+      <li><b>2</b><span><em>Status filter</em> — <code>SegmentedControl</code>, All / Pending / Completed. Selected segment is teal-filled; the same control appears in the drawer, deliberately.</span></li>
+      <li><b>3</b><span><em>Sort</em> — 168px <code>Select</code>: Due date · Recently added · A–Z · Status. Never deselectable; a list always has an order.</span></li>
+      <li><b>4</b><span><em>New task</em> — the only filled button on the page, shown here with its keyboard focus ring. Opens the drawer in create mode.</span></li>
+    </ul>
+
+    <p class="spec">Toolbar is one <code>Paper</code>, padding 14/16, controls in a 10px-gap row that wraps below 900px. Only one teal fill per surface: the primary action. Search and Sort stay neutral so the filled button reads as the single call to action.</p>
+  </section>
+
+  <!-- ═══ 03 PAGINATION ════════════════════════════════════════ -->
+  <section class="state">
+    <div class="state-label"><b>03</b><span>Pagination — 47 tasks, 8 per page</span></div>
+
+    <div class="paper pager" style="margin-top:0">
+      <span class="range">Showing 1–8 of 47</span>
+      <div class="pages push">
+        <button type="button" class="step" disabled>Previous</button>
+        <button type="button" aria-current="page">1</button>
+        <button type="button">2</button>
+        <button type="button">3</button>
+        <button type="button">4</button>
+        <button type="button">5</button>
+        <button type="button">6</button>
+        <button type="button" class="step">Next</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:12.5px;color:var(--slate)">Rows</span>
+        <button type="button" class="select">8 <span class="caret" aria-hidden="true"></span></button>
+      </div>
+    </div>
+
+    <p class="spec">Page numbers are part of the numeral system: display face at 18px, tabular, so they rhyme with the row spine. Current page is teal-filled and carries <code>aria-current="page"</code>. Previous is disabled on page 1 rather than hidden, so the control never changes width. Page-size options: 8 · 16 · 24 · 48.</p>
+  </section>
+
+  <!-- ═══ 04 CREATE / EDIT DRAWER ══════════════════════════════ -->
+  <section class="state">
+    <div class="state-label"><b>04</b><span>Edit task — right drawer, 420px (rationale in the file header)</span></div>
+
+    <div class="viewport">
+      <div class="viewport-inner">
+        <div class="paper toolbar">
+          <div class="search"><span class="glass" aria-hidden="true"></span><input type="search" placeholder="Search tasks" aria-label="Search tasks"></div>
+          <div class="seg" role="group" aria-label="Filter by status">
+            <button type="button" aria-pressed="true">All</button>
+            <button type="button" aria-pressed="false">Pending</button>
+            <button type="button" aria-pressed="false">Completed</button>
+          </div>
+          <button type="button" class="btn btn--primary push"><span class="plus" aria-hidden="true">+</span> New task</button>
+        </div>
+        <div class="list">
+          <article class="row"><div class="idx" aria-hidden="true">01</div><input class="cb" type="checkbox" aria-label="Mark task 01 complete"><div><p class="title">Ship rate-limit headers on /v1/tasks</p><p class="meta">Added Aug 4 · Dana K · 2 notes</p></div><div class="chips"><span class="chip">API</span></div><span class="badge badge--pending">Pending</span><div class="due"><b>Aug 13</b></div><button class="kebab" type="button" aria-label="More actions">⋯</button></article>
+          <article class="row row--done"><div class="mark" aria-hidden="true">✓</div><input class="cb" type="checkbox" checked aria-label="Mark task incomplete"><div><p class="title">Write the migration for task_labels</p><p class="meta">Completed Aug 11 · Priya S</p></div><div class="chips"><span class="chip">Infra</span></div><span class="badge badge--done">Done</span><div class="due"><b>Aug 11</b></div><button class="kebab" type="button" aria-label="More actions">⋯</button></article>
+          <article class="row"><div class="idx" aria-hidden="true">03</div><input class="cb" type="checkbox" aria-label="Mark task 03 complete"><div><p class="title">Fix the duplicate toast on rapid save</p><p class="meta">Added Aug 6 · Dana K</p></div><div class="chips"><span class="chip">API</span></div><span class="badge badge--pending">Pending</span><div class="due"><b>Aug 14</b></div><button class="kebab" type="button" aria-label="More actions">⋯</button></article>
+          <article class="row"><div class="idx" aria-hidden="true">04</div><input class="cb" type="checkbox" aria-label="Mark task 04 complete"><div><p class="title">Audit focus order in the task drawer</p><p class="meta">Added Jul 29 · Priya S · 1 note</p></div><div class="chips"><span class="chip">A11y</span></div><span class="badge badge--pending">Pending</span><div class="due due--late"><b>Aug 8</b><span class="late-tag">Overdue</span></div><button class="kebab" type="button" aria-label="More actions">⋯</button></article>
+          <article class="row"><div class="idx" aria-hidden="true">05</div><input class="cb" type="checkbox" aria-label="Mark task 05 complete"><div><p class="title">Cut cold start on the search worker</p><p class="meta">Added Aug 2 · Dana K</p></div><div class="chips"><span class="chip">Infra</span></div><span class="badge badge--pending">Pending</span><div class="due"><b>Aug 18</b></div><button class="kebab" type="button" aria-label="More actions">⋯</button></article>
+        </div>
+      </div>
+
+      <div class="scrim" aria-hidden="true"></div>
+
+      <aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title">
+        <div class="drawer-head">
+          <span class="n" aria-hidden="true">04</span>
+          <h3 id="drawer-title">Edit task</h3>
+          <button class="x" type="button" aria-label="Close without saving">✕</button>
+        </div>
+        <div class="drawer-body">
+          <div class="field">
+            <label for="t-title">Task title</label>
+            <input class="control is-focused" id="t-title" type="text" value="Audit focus order in the task drawer">
+          </div>
+          <div class="field">
+            <label for="t-notes">Notes</label>
+            <textarea class="control" id="t-notes">Tab order jumps from the title field to Delete task. Check the close button too — it should be last, not first.</textarea>
+          </div>
+          <div class="field">
+            <label for="t-due">Due date</label>
+            <input class="control" id="t-due" type="text" value="Aug 8, 2026">
+            <p class="hint">Overdue by 4 days. Pick a new date or clear it.</p>
+          </div>
+          <div class="field">
+            <label id="t-status-label">Status</label>
+            <div class="seg" role="group" aria-labelledby="t-status-label" style="display:inline-flex">
+              <button type="button" aria-pressed="true">Pending</button>
+              <button type="button" aria-pressed="false">Completed</button>
+            </div>
+          </div>
+          <div class="field" style="margin-bottom:0">
+            <label for="t-labels">Labels</label>
+            <div class="multi" id="t-labels" tabindex="0"><span class="chip">A11y</span><span class="chip">API</span><span class="ph">Add a label</span></div>
+          </div>
+        </div>
+        <div class="drawer-foot">
+          <button type="button" class="btn btn--primary">Save task</button>
+          <button type="button" class="btn btn--default">Cancel</button>
+          <button type="button" class="btn btn--danger push">Delete task</button>
+        </div>
+      </aside>
+    </div>
+
+    <p class="spec">Drawer 420px, <code>shadow md</code>, scrim <code>rgba(20,38,42,.35)</code>. The row's numeral repeats in the drawer header so the edit never loses its place in the list. Create mode: same drawer, empty fields, title "New task", no Delete. Field error copy, when the title is blank: <b>"This task needs a title. Add a few words so you can find it later."</b> — what happened, then what to do. Delete task is <b>brass</b>-tinted and subtle, sitting apart from the save pair; it confirms in a small <code>Modal</code> before deleting.</p>
+  </section>
+
+  <!-- ═══ 05 LOADING ═══════════════════════════════════════════ -->
+  <section class="state">
+    <div class="state-label"><b>05</b><span>Loading — skeleton rows</span></div>
+
+    <div class="paper toolbar">
+      <div class="search"><span class="glass" aria-hidden="true"></span><input type="search" placeholder="Search tasks" aria-label="Search tasks" disabled></div>
+      <div class="seg" role="group" aria-label="Filter by status">
+        <button type="button" aria-pressed="true">All</button>
+        <button type="button" aria-pressed="false">Pending</button>
+        <button type="button" aria-pressed="false">Completed</button>
+      </div>
+      <button type="button" class="btn btn--primary push"><span class="plus" aria-hidden="true">+</span> New task</button>
+    </div>
+
+    <div class="list" aria-busy="true" aria-live="polite">
+      <article class="row"><span class="sk sk--num" aria-hidden="true"></span><span class="sk" style="width:16px;height:16px" aria-hidden="true"></span><div><span class="sk" style="width:46%;height:13px;margin-bottom:7px"></span><span class="sk" style="width:26%;height:10px"></span></div><span class="sk" style="width:44px;height:20px"></span><span class="sk" style="width:70px;height:22px;border-radius:999px"></span><span class="sk" style="width:56px;height:12px;margin-left:auto"></span><span></span></article>
+      <article class="row"><span class="sk sk--num" aria-hidden="true"></span><span class="sk" style="width:16px;height:16px" aria-hidden="true"></span><div><span class="sk" style="width:62%;height:13px;margin-bottom:7px"></span><span class="sk" style="width:20%;height:10px"></span></div><span class="sk" style="width:52px;height:20px"></span><span class="sk" style="width:70px;height:22px;border-radius:999px"></span><span class="sk" style="width:56px;height:12px;margin-left:auto"></span><span></span></article>
+      <article class="row"><span class="sk sk--num" aria-hidden="true"></span><span class="sk" style="width:16px;height:16px" aria-hidden="true"></span><div><span class="sk" style="width:38%;height:13px;margin-bottom:7px"></span><span class="sk" style="width:30%;height:10px"></span></div><span class="sk" style="width:44px;height:20px"></span><span class="sk" style="width:70px;height:22px;border-radius:999px"></span><span class="sk" style="width:56px;height:12px;margin-left:auto"></span><span></span></article>
+      <article class="row"><span class="sk sk--num" aria-hidden="true"></span><span class="sk" style="width:16px;height:16px" aria-hidden="true"></span><div><span class="sk" style="width:54%;height:13px;margin-bottom:7px"></span><span class="sk" style="width:24%;height:10px"></span></div><span class="sk" style="width:60px;height:20px"></span><span class="sk" style="width:70px;height:22px;border-radius:999px"></span><span class="sk" style="width:56px;height:12px;margin-left:auto"></span><span></span></article>
+    </div>
+
+    <p class="spec">Identical row geometry to the loaded state — same 48px height, same grid — so nothing reflows when data lands. Bars are flat <b>mist</b>: no shimmer, no pulse (the system's only motion is a 120ms transition). Four rows, not eight: enough to read as a list, short enough not to promise a count. Container carries <code>aria-busy="true"</code>; the toolbar stays visible with search disabled.</p>
+  </section>
+
+  <!-- ═══ 06 EMPTY — NO TASKS ══════════════════════════════════ -->
+  <section class="state">
+    <div class="state-label"><b>06</b><span>Empty — no tasks yet (first run)</span></div>
+
+    <div class="paper empty">
+      <div class="figure" aria-hidden="true">01</div>
+      <h3>Nothing on the list yet</h3>
+      <p>Write down the first thing you owe someone today. It gets number 01 and keeps it until you close it out.</p>
+      <div class="actions">
+        <button type="button" class="btn btn--primary"><span class="plus" aria-hidden="true">+</span> Create task</button>
+        <button type="button" class="btn btn--default">Import from CSV</button>
+      </div>
+    </div>
+
+    <p class="spec">An invitation, not a mood: the copy names the next action and what happens after it. The figure is the signature at 132px in <b>edge</b> — <code>aria-hidden</code>, decorative, still on-system. The primary button says <b>Create task</b>, and the toast that follows says <b>Task created</b> — same verb, both directions.</p>
+  </section>
+
+  <!-- ═══ 07 EMPTY — NO RESULTS ════════════════════════════════ -->
+  <section class="state">
+    <div class="state-label"><b>07</b><span>Empty — no results for this filter</span></div>
+
+    <div class="paper toolbar">
+      <div class="search"><span class="glass" aria-hidden="true"></span><input type="search" value="rate limit" aria-label="Search tasks"></div>
+      <div class="seg" role="group" aria-label="Filter by status">
+        <button type="button" aria-pressed="false">All</button>
+        <button type="button" aria-pressed="false">Pending</button>
+        <button type="button" aria-pressed="true">Completed</button>
+      </div>
+      <button type="button" class="select"><span class="lab">Sort</span> Due date <span class="caret" aria-hidden="true"></span></button>
+      <button type="button" class="btn btn--primary push"><span class="plus" aria-hidden="true">+</span> New task</button>
+    </div>
+
+    <div class="paper empty">
+      <div class="figure" aria-hidden="true">00</div>
+      <h3>No completed tasks match “rate limit”</h3>
+      <p>One pending task matches. Switch the filter to Pending to see it, or search something else.</p>
+      <div class="actions">
+        <button type="button" class="btn btn--primary">Show pending matches</button>
+        <button type="button" class="btn btn--default">Clear search</button>
+      </div>
+    </div>
+
+    <p class="spec">Different job from 06: this state must explain <i>which</i> constraint emptied the list and hand back the shortest way out. It quotes the query, names the filter, counts what a nearby filter would find, and never says "no results found" full stop. Figure reads <b>00</b> — the count, not a mascot. First-run copy is never reused here.</p>
+  </section>
+
+  <!-- ═══ 08 TOASTS ════════════════════════════════════════════ -->
+  <section class="state">
+    <div class="state-label"><b>08</b><span>Toasts — success and error</span></div>
+
+    <div class="toasts">
+      <div class="toast toast--ok" role="status">
+        <span class="toast-mark" aria-hidden="true">✓</span>
+        <div>
+          <h4>Task created</h4>
+          <p>“Ship rate-limit headers on /v1/tasks” is number 01, due Aug 13.</p>
+        </div>
+        <button class="x" type="button" aria-label="Dismiss">✕</button>
+      </div>
+
+      <div class="toast toast--err" role="alert">
+        <span class="toast-mark" aria-hidden="true">!</span>
+        <div>
+          <h4>Couldn't save this task</h4>
+          <p>The server didn't answer in 10 seconds. Your edits are still here — try Save task again.</p>
+          <button type="button" class="btn btn--default retry" style="height:30px;padding:0 12px">Save task</button>
+        </div>
+        <button class="x" type="button" aria-label="Dismiss">✕</button>
+      </div>
+    </div>
+
+    <p class="spec">Bottom-right, 380px, radius lg, <code>shadow md</code>, 8px apart, newest on top. Success closes itself after 4s and mirrors the button's verb (<b>Create task → Task created</b>). Errors never auto-close, state the cause, promise the work is safe, and repeat the exact button label to retry. Success mark is <b>teal</b>, error mark <b>brass</b>; both carry a glyph and text, so neither depends on color. <code>role="status"</code> vs <code>role="alert"</code> sets announcement priority.</p>
+  </section>
+
+  <!-- ═══ 09 MOBILE ════════════════════════════════════════════ -->
+  <section class="state">
+    <div class="state-label"><b>09</b><span>Mobile — 360px, list and toolbar</span></div>
+
+    <div class="phone">
+      <div class="phone-bar">
+        <div class="wordmark">Tally</div>
+        <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+          <span class="count" style="gap:5px"><b style="font-size:24px">47</b></span>
+          <span class="avatar" style="width:26px;height:26px;font-size:11px" aria-hidden="true">DK</span>
+        </div>
+      </div>
+      <div class="phone-body">
+        <div class="search"><span class="glass" aria-hidden="true"></span><input type="search" placeholder="Search tasks" aria-label="Search tasks"></div>
+        <div class="seg" role="group" aria-label="Filter by status">
+          <button type="button" aria-pressed="true">All</button>
+          <button type="button" aria-pressed="false">Pending</button>
+          <button type="button" aria-pressed="false">Done</button>
+        </div>
+
+        <article class="m-row">
+          <div class="idx" aria-hidden="true">01</div>
+          <input class="cb" type="checkbox" aria-label="Mark “Ship rate-limit headers” complete">
+          <div>
+            <p class="title">Ship rate-limit headers on /v1/tasks</p>
+            <div class="m-meta"><span class="badge badge--pending">Pending</span><span class="due" style="text-align:left">Aug 13</span><span class="chip">API</span></div>
+          </div>
+        </article>
+
+        <article class="m-row row--done">
+          <div class="mark" aria-hidden="true">✓</div>
+          <input class="cb" type="checkbox" checked aria-label="Mark “Write the migration for task_labels” incomplete">
+          <div>
+            <p class="title">Write the migration for task_labels</p>
+            <div class="m-meta"><span class="badge badge--done">Done</span><span class="due" style="text-align:left">Aug 11</span><span class="chip">Infra</span></div>
+          </div>
+        </article>
+
+        <article class="m-row">
+          <div class="idx" aria-hidden="true">04</div>
+          <input class="cb" type="checkbox" aria-label="Mark “Audit focus order in the task drawer” complete">
+          <div>
+            <p class="title">Audit focus order in the task drawer</p>
+            <div class="m-meta"><span class="badge badge--late">Overdue</span><span class="due due--late" style="text-align:left"><b style="display:inline">Aug 8</b></span><span class="chip">A11y</span></div>
+          </div>
+        </article>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 2px 2px">
+          <span class="range" style="font-size:12px;color:var(--slate)">1–8 of 47</span>
+          <div class="pages"><button type="button" aria-current="page">1</button><button type="button">2</button><button type="button" class="step">Next</button></div>
+        </div>
+      </div>
+      <div class="phone-foot">
+        <button type="button" class="btn btn--primary"><span class="plus" aria-hidden="true">+</span> New task</button>
+      </div>
+    </div>
+
+    <p class="spec">Sort control drops into the filter row's overflow; search and filter each take full width. The numeral shrinks to 26px but never disappears — it is the one element that survives every breakpoint. Meta collapses under the title as a wrapping row of badge · date · label. New task becomes a 44px full-width button pinned to the bottom bar, clear of the thumb zone. Drawer becomes a full-height sheet with the same field order.</p>
+  </section>
+
+</main>
+
+</body>
+</html>
