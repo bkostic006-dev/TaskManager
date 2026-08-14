@@ -1,8 +1,10 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "module": "commonjs",
-    "outDir": "./dist",
-    "baseUrl": "./"
-  }
+    "module": "node16",
+    "moduleResolution": "node16",
+    "outDir": "./dist"
+  },
+  "include": ["src/**/*", "test/**/*"],
+  "exclude": ["dist", "generated", "node_modules"]
 }

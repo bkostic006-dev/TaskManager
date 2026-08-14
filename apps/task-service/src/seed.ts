@@ -43,7 +43,11 @@ const TASKS: readonly SeedTask[] = [
     completedDaysAgo: 33,
   },
   { title: 'Update the on-call rota for August', createdDaysAgo: 33, completedDaysAgo: 30 },
-  { title: 'File the mileage claim for the Bristol trip', createdDaysAgo: 31, completedDaysAgo: 26 },
+  {
+    title: 'File the mileage claim for the Bristol trip',
+    createdDaysAgo: 31,
+    completedDaysAgo: 26,
+  },
   {
     title: 'Move the staging database to the new subnet',
     description: 'Blocked the VPC peering cleanup.',
@@ -174,7 +178,9 @@ async function seed(prisma: PrismaClient): Promise<void> {
   const { count } = await prisma.task.createMany({ data: rows });
   const completed = rows.filter((row) => row.completed).length;
 
-  console.log(`[seed] created ${count} tasks (${completed} completed, ${count - completed} pending)`);
+  console.log(
+    `[seed] created ${count} tasks (${completed} completed, ${count - completed} pending)`,
+  );
 }
 
 async function main(): Promise<void> {
