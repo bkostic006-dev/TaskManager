@@ -35,6 +35,20 @@ pnpm --filter <service> exec prisma migrate dev --name <name>
 - Never hand-edit migrations or generated Prisma clients.
 - Conventional commits, small and imperative. Several per stage, no `wip`.
 
+## Every stage ends with a compliance check
+
+Before a stage's checkpoint closes:
+
+1. **Re-read `docs/BRIEF.md`** and confirm what the stage just built actually satisfies the
+   requirements it claimed — from the code, not from the plan. Update the coverage table in
+   `docs/PLAN.md` if anything moved.
+2. **Never assert a property you have not tested.** A comment saying "cannot happen", "refuses
+   to start", or "is indistinguishable" is a claim, and every one this project shipped turned
+   out false. Verify it and say what you ran, or describe what the code does and stop.
+3. **If the stage touched auth, tenancy, or a trust boundary**, run an adversarial review — a
+   subagent briefed to attack it, not to confirm it. That is what caught the problems a
+   checklist did not.
+
 ## Tests
 
 Written **after** the code in each stage works, covering logic that actually branches: token rotation, the list query builder, completion transitions, and gateway status-code/validation checks. Roughly 25 in total.
