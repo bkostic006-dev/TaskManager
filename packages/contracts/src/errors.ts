@@ -34,3 +34,42 @@ export interface ApiError {
   message: string;
   details?: Record<string, string[]>;
 }
+
+/**
+ * The plan's API table, executable. Every status code the stack emits comes
+ * from this map and from nowhere else.
+ *
+ * It is shared rather than gateway-local because the internal hop is also
+ * HTTP: a service renders its `DomainError` with the status from this table,
+ * and the gateway reads the code back off the body and re-raises. One table
+ * means the two ends cannot drift into disagreeing about what a `CONFLICT` is.
+ */
+export const ERROR_STATUS: Record<ErrorCode, number> = {
+  [ErrorCode.Validation]: 400,
+  [ErrorCode.Unauthorized]: 401,
+  [ErrorCode.NotFound]: 404,
+  [ErrorCode.Conflict]: 409,
+  [ErrorCode.Internal]: 500,
+  [ErrorCode.Upstream]: 503,
+};
+
+/**
+ * A failure a service raises on purpose, tagged with the domain reason rather
+ * than an HTTP status.
+ *
+ * Services stay HTTP-ignorant: they throw this, and the edge that owns the
+ * response — each service's own translating filter inward, the gateway's
+ * global filter outward — converts the code through {@link ERROR_STATUS}.
+ * Anything that is *not* a `DomainError` is unplanned and becomes a `500` with
+ * its message swallowed.
+ */
+export class DomainError extends Error {
+  constructor(
+    readonly code: ErrorCode,
+    message: string,
+    readonly details?: Record<string, string[]>,
+  ) {
+    super(message);
+    this.name = 'DomainError';
+  }
+}
