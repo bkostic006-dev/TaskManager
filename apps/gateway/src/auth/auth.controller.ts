@@ -110,8 +110,14 @@ export class AuthController {
     try {
       await this.auth.logout(token);
     } catch (error) {
-      this.logger.warn(
-        `Refresh token could not be revoked; it will expire on its own: ${
+      // error, not warn: a credential outliving its own revocation is a
+      // security event, not an oddity. The user is still logged out as far as
+      // this browser is concerned — the cookie was cleared before the call —
+      // but a copy taken beforehand stays valid until it expires. Stated in
+      // the README's limitations rather than surfaced, because a 503 here
+      // reports something the user cannot act on and cannot retry.
+      this.logger.error(
+        `Refresh token could not be revoked; it stays valid until it expires: ${
           error instanceof Error ? error.message : String(error)
         }`,
       );
