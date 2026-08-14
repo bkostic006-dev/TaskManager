@@ -1,0 +1,60 @@
+// Auth service data model — owns `auth_db` and nothing else. The task service
+// has no route to this database and no compile-time knowledge of these models;
+// the only thing the two share is the value of DEMO_USER_ID.
+
+generator client {
+  provider = "prisma-client-js"
+
+  // Not the default location. pnpm hoists one physical copy of @prisma/client
+  // into the virtual store and symlinks both services at it, so the default
+  // output has the two schemas generating over each other — whichever ran last
+  // wins, and the other service's build sees the wrong models. A per-app output
+  // directory is also what Prisma 7 will require.
+  output = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  email        String   @unique
+  name         String
+  passwordHash String
+  createdAt    DateTime @default(now())
+
+  refreshTokens RefreshToken[]
+}
+
+/// One row per issued refresh token. Tokens are stored hashed, never in the
+/// clear, so a database leak cannot be replayed against the API.
+model RefreshToken {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId String @db.Uuid
+
+  /// SHA-256 of the opaque token. Unique because stage 3's rotation is a
+  /// compare-and-swap that locates a row by this column alone — a duplicate
+  /// would make "which token was just presented?" ambiguous.
+  tokenHash String @unique
+
+  expiresAt DateTime
+  revokedAt DateTime?
+
+  /// Successor issued when this token was rotated. Unique enforces the chain:
+  /// a token can be replaced exactly once, so a replayed token cannot fork it.
+  replacedById String? @unique @db.Uuid
+
+  createdAt DateTime @default(now())
+
+  /// Cascade: deleting a user must not strand credentials that still validate.
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  replacedBy RefreshToken? @relation("TokenRotation", fields: [replacedById], references: [id], onDelete: SetNull)
+  replaced   RefreshToken? @relation("TokenRotation")
+
+  /// Every lookup that is not by tokenHash is "this user's tokens".
+  @@index([userId])
+}

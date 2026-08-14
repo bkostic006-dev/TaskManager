@@ -8,10 +8,17 @@
  */
 export const DEMO_USER_ID = '00000000-0000-4000-8000-000000000001';
 
-/** Credentials printed in the README so a reviewer can log in immediately. */
+/**
+ * Credentials printed in the README so a reviewer can log in immediately.
+ *
+ * `password` is the plaintext the auth seed hashes with argon2id; nothing else
+ * may read it. `name` lives here rather than in the seed so the demo account's
+ * display name has one definition shared by the seed and the README.
+ */
 export const DEMO_CREDENTIALS = {
   email: 'dana@northbay.dev',
   password: 'tally-demo-2026',
+  name: 'Dana Whitfield',
 } as const;
 
 /**

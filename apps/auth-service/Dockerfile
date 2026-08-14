@@ -27,6 +27,9 @@ COPY apps/auth-service apps/auth-service
 # contracts first: the app resolves @tally/contracts through its dist, so the
 # app build fails outright if this has not run.
 RUN pnpm --filter @tally/contracts build
+# The app's `build` script is `prisma generate && nest build`. The generate is
+# not optional here: src imports the client's types, so tsc has nothing to
+# compile against until the schema has been turned into a client.
 RUN pnpm --filter @tally/auth-service build
 
 # ---------------------------------------------------------------- runtime
@@ -40,6 +43,12 @@ RUN pnpm --filter @tally/auth-service build
 # webpack and prettier into a "production" tree. So this stage runs its own
 # install: symlinks created here are valid here, and nothing crosses a stage
 # boundary. Only dist/ is copied in.
+#
+# That has a consequence Prisma forces us to handle: the client generated during
+# `build` lives in that stage's node_modules and never arrives. This stage
+# therefore copies the schema and generates its own client, against its own
+# install. `prisma` is a production dependency for the same reason — the CLI has
+# to exist at container start for `migrate deploy`.
 FROM node:22-slim AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
@@ -55,12 +64,23 @@ COPY apps/web/package.json apps/web/
 # node-linker=hoisted: the hoisted layout ignores the filter and installs every
 # workspace's dependencies flat — Next and Mantine included, 1.08GB against
 # 388MB.
+#
+# argon2 is native. It resolves a prebuilt binary for linux/glibc here, which is
+# why the base is node:22-slim and not alpine — musl would fall through to a
+# source build and drag in python and a C toolchain.
 RUN pnpm install --frozen-lockfile --prod --filter @tally/auth-service... \
     && pnpm store prune
+
+# Schema and migrations: the first is what `generate` reads, the second is what
+# `migrate deploy` applies on every start.
+COPY apps/auth-service/prisma apps/auth-service/prisma
+RUN pnpm --filter @tally/auth-service exec prisma generate
+
 COPY --from=build /app/packages/contracts/dist packages/contracts/dist
 COPY --from=build /app/apps/auth-service/dist apps/auth-service/dist
+COPY --chmod=0755 apps/auth-service/docker-entrypoint.sh /usr/local/bin/entrypoint.sh
 
 USER node
 WORKDIR /app/apps/auth-service
 EXPOSE 4001
-CMD ["node", "dist/main.js"]
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
