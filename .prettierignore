@@ -9,3 +9,7 @@ pnpm-lock.yaml
 
 # Design source, kept verbatim as authored.
 design/
+
+# A verbatim transcription of the assignment. It is a record, not our prose --
+# reformatting it would blur the line between what was issued and what we wrote.
+docs/BRIEF.md

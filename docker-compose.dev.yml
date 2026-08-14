@@ -1,0 +1,14 @@
+# Local development override. The base file deliberately keeps Postgres off the
+# host; this publishes it so `pnpm --filter <app> dev` on the host can talk to
+# the containerised database.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up postgres
+#
+# Host connection string:
+#   postgresql://tally:tally_dev_only_not_a_secret@localhost:5432/auth_db?schema=public
+
+services:
+  postgres:
+    ports:
+      # Override POSTGRES_PORT if 5432 is already taken on your machine.
+      - '${POSTGRES_PORT:-5432}:5432'

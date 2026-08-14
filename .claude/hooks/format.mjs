@@ -22,7 +22,10 @@ const readStdin = async () => {
 
 const run = (args, file) => {
   try {
-    execFileSync('pnpm', ['exec', ...args, file], { stdio: 'ignore', shell: process.platform === 'win32' });
+    execFileSync('pnpm', ['exec', ...args, file], {
+      stdio: 'ignore',
+      shell: process.platform === 'win32',
+    });
   } catch {
     // A formatter/linter that can't parse a half-written file is expected noise.
   }

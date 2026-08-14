@@ -1,0 +1,153 @@
+# The reviewer's entry point: `docker compose up --build` on a bare clone, with
+# no .env step. Every variable below carries a `${VAR:-default}` fallback, and
+# those defaults are local throwaway values — a real deployment injects the same
+# names from its own secret store and never reads this file's fallbacks.
+#
+# Only the gateway and the web app publish ports. Postgres and the two internal
+# services are reachable on the compose network by service name only; publishing
+# 5432 is the most common way a reviewer's first run collides with something
+# already installed. `docker-compose.dev.yml` publishes it when you want it.
+
+name: tally
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-tally}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tally_dev_only_not_a_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-tally}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      # Creates auth_db and tasks_db. Runs only on an empty volume.
+      - ./docker/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    healthcheck:
+      # -h 127.0.0.1 on purpose: during initialisation Postgres listens on the
+      # unix socket only, so a socket probe would report healthy before
+      # init-db.sql has run. A TCP probe cannot pass early.
+      test:
+        ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -U ${POSTGRES_USER:-tally} -d ${POSTGRES_DB:-tally}']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  auth-service:
+    build:
+      context: .
+      dockerfile: apps/auth-service/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 4001
+      # Set now, before Prisma exists, so stage 2 is pure schema work.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-tally}:${POSTGRES_PASSWORD:-tally_dev_only_not_a_secret}@postgres:5432/auth_db?schema=public
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      # node:22-slim ships neither curl nor wget; Node 22 has global fetch.
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:4001/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  task-service:
+    build:
+      context: .
+      dockerfile: apps/task-service/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 4002
+      DATABASE_URL: postgresql://${POSTGRES_USER:-tally}:${POSTGRES_PASSWORD:-tally_dev_only_not_a_secret}@postgres:5432/tasks_db?schema=public
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:4002/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  gateway:
+    build:
+      context: .
+      dockerfile: apps/gateway/Dockerfile
+    restart: unless-stopped
+    ports:
+      - '${GATEWAY_PORT:-3001}:3001'
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      AUTH_SERVICE_URL: http://auth-service:4001
+      TASK_SERVICE_URL: http://task-service:4002
+      # Exact origin, because CORS with credentials cannot use a wildcard.
+      WEB_ORIGIN: http://localhost:${WEB_PORT:-3000}
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      task-service:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3001/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        # Baked into the client bundle at build time and read by the browser, so
+        # it must be the host-side address. Derived from GATEWAY_PORT so moving
+        # the gateway's published port cannot silently orphan the frontend.
+        NEXT_PUBLIC_API_URL: http://localhost:${GATEWAY_PORT:-3001}
+    restart: unless-stopped
+    ports:
+      - '${WEB_PORT:-3000}:3000'
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+    depends_on:
+      gateway:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+volumes:
+  postgres-data:

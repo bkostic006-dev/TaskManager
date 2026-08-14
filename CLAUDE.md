@@ -35,7 +35,7 @@ Do not add UI snapshots, CSS regression tests, library-internals tests, or exhau
 
 ## TSDoc
 
-**Types carry the *what*; comments carry the *why* and the behavior contract.** No `@param {string}`, no `@returns {Promise<T>}` — TypeScript already knows.
+**Types carry the _what_; comments carry the _why_ and the behavior contract.** No `@param {string}`, no `@returns {Promise<T>}` — TypeScript already knows.
 
 Required on: every `contracts` export · service methods holding business logic (rotation, the query builder, completion transitions) · guards, filters, interceptors — one block each saying what it catches and what it emits · frontend hooks — one line, plus anything non-obvious. Use `@throws` on anything that maps to a status code; it doubles as the error contract.
 

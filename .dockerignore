@@ -1,0 +1,39 @@
+# Keep the build context small: every byte here is uploaded to the daemon on
+# every build. Dependencies and build output are produced inside the image, so
+# the host's copies are noise at best and platform-wrong at worst.
+node_modules
+**/node_modules
+.pnpm-store
+
+.next
+**/.next
+dist
+**/dist
+out
+**/out
+*.tsbuildinfo
+**/*.tsbuildinfo
+
+coverage
+**/coverage
+
+.git
+.gitattributes
+.gitignore
+
+# Documentation and design sources are never read by a build.
+design
+docs
+.claude
+README.md
+CLAUDE.md
+
+# Local env files must never be baked into an image.
+.env
+.env.*
+!.env.example
+
+.DS_Store
+Thumbs.db
+.idea
+.vscode

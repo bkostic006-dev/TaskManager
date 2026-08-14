@@ -7,18 +7,18 @@ Reviewers to invite at the end: `MFarrugiaCatena` (matthew.farrugia@catenamedia.
 
 ## Decisions
 
-| Area | Choice | Why |
-|---|---|---|
-| Monorepo | pnpm workspaces | 4 apps + 1 shared package; Nx is tooling noise at this size |
-| Transport | **HTTP** (`@nestjs/axios` → `HttpService`) | Brief allows any transport. Status codes propagate natively, healthchecks are real, and `HttpService` returns Observables so the RxJS bonus falls out |
-| ORM | **Prisma 6** | Boring and well documented. Prisma 7's ESM/driver-adapter changes buy nothing here |
-| Data | One Postgres container, two databases (`auth_db`, `tasks_db`) | Service boundary without container sprawl. No cross-DB foreign key — `Task.userId` is a plain column |
-| Runtime | `node:22-slim` | LTS to 2027, widest native-prebuild coverage (argon2). Not alpine |
-| Backend | NestJS 11 | 12 is still a preview |
-| Frontend | Next 15 · React 19 · **Mantine 8** · TanStack Query 5 | Mantine 8 is what `design/tokens.ts` was authored against — it drops in unmodified |
-| Auth | Access JWT 15 min (HS256, in memory) + opaque refresh 7 d (httpOnly cookie, SHA-256 hashed), **rotation** | Rotation is the brief's only "must" |
-| Validation | class-validator + global `ValidationPipe` (`whitelist`, `forbidNonWhitelisted`, `transform`) | Explicit brief requirement |
-| Tests | After each stage, on logic that branches. ~25 total | The brief never mentions testing; a proportionate suite is a professional-standards signal, not a discipline framework |
+| Area       | Choice                                                                                                    | Why                                                                                                                                                   |
+| ---------- | --------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Monorepo   | pnpm workspaces                                                                                           | 4 apps + 1 shared package; Nx is tooling noise at this size                                                                                           |
+| Transport  | **HTTP** (`@nestjs/axios` → `HttpService`)                                                                | Brief allows any transport. Status codes propagate natively, healthchecks are real, and `HttpService` returns Observables so the RxJS bonus falls out |
+| ORM        | **Prisma 6**                                                                                              | Boring and well documented. Prisma 7's ESM/driver-adapter changes buy nothing here                                                                    |
+| Data       | One Postgres container, two databases (`auth_db`, `tasks_db`)                                             | Service boundary without container sprawl. No cross-DB foreign key — `Task.userId` is a plain column                                                  |
+| Runtime    | `node:22-slim`                                                                                            | LTS to 2027, widest native-prebuild coverage (argon2). Not alpine                                                                                     |
+| Backend    | NestJS 11                                                                                                 | 12 is still a preview                                                                                                                                 |
+| Frontend   | Next 15 · React 19 · **Mantine 8** · TanStack Query 5                                                     | Mantine 8 is what `design/tokens.ts` was authored against — it drops in unmodified                                                                    |
+| Auth       | Access JWT 15 min (HS256, in memory) + opaque refresh 7 d (httpOnly cookie, SHA-256 hashed), **rotation** | Rotation is the brief's only "must"                                                                                                                   |
+| Validation | class-validator + global `ValidationPipe` (`whitelist`, `forbidNonWhitelisted`, `transform`)              | Explicit brief requirement                                                                                                                            |
+| Tests      | After each stage, on logic that branches. ~25 total                                                       | The brief never mentions testing; a proportionate suite is a professional-standards signal, not a discipline framework                                |
 
 ## Architecture
 
@@ -56,25 +56,27 @@ No `dueDate` — not in the brief, and cutting it removes a timezone bug class. 
 
 ## API
 
-| Method | Route | Success |
-|---|---|---|
-| POST | `/auth/signup` | 201 + refresh cookie |
-| POST | `/auth/login` | 200 + `{ accessToken }` + refresh cookie |
-| POST | `/auth/refresh` | 200 + rotated cookie |
-| POST | `/auth/logout` | 204 |
-| GET | `/auth/me` | 200 |
-| GET · POST | `/tasks` | 200 · 201 |
-| GET · PATCH · DELETE | `/tasks/:id` | 200 · 200 · 204 |
-| PATCH | `/tasks/:id/complete` · `/uncomplete` | 200 |
+| Method               | Route                                 | Success                                  |
+| -------------------- | ------------------------------------- | ---------------------------------------- |
+| POST                 | `/auth/signup`                        | 201 + refresh cookie                     |
+| POST                 | `/auth/login`                         | 200 + `{ accessToken }` + refresh cookie |
+| POST                 | `/auth/refresh`                       | 200 + rotated cookie                     |
+| POST                 | `/auth/logout`                        | 204                                      |
+| GET                  | `/auth/me`                            | 200                                      |
+| GET · POST           | `/tasks`                              | 200 · 201                                |
+| GET · PATCH · DELETE | `/tasks/:id`                          | 200 · 200 · 204                          |
+| PATCH                | `/tasks/:id/complete` · `/uncomplete` | 200                                      |
 
-**Errors:** `400` validation · `401` missing/expired/invalid token · `404` not found *or not yours* · `409` email taken · `429` throttled · `500` unexpected · `503` upstream service unreachable or timed out. Uniform body `{ statusCode, error, message, details? }` from one global filter.
+**Errors:** `400` validation · `401` missing/expired/invalid token · `404` not found _or not yours_ · `409` email taken · `429` throttled · `500` unexpected · `503` upstream service unreachable or timed out. Uniform body `{ statusCode, error, message, details? }` from one global filter.
 
 **List contract**
+
 ```
 GET /tasks?page=1&pageSize=8&status=all|completed|pending
           &search=milk&sortBy=createdAt|completed|title&sortOrder=asc|desc
 → { data: Task[], meta: { page, pageSize, total, totalPages } }
 ```
+
 - `page` ≥ 1 · `pageSize` ∈ {8, 16, 24, 48} — **out-of-range is rejected with 400, never silently clamped**
 - `search` = case-insensitive contains on title + description
 - `sortBy=completed` tie-breaks on `createdAt desc`; every sort ends with `id` so pagination is stable
@@ -99,23 +101,23 @@ These cost real time if discovered late. All six came out of an adversarial revi
 Each stage ends in something runnable and gets reviewed before the next begins.
 
 - [ ] **0 · Harness** — `CLAUDE.md`, format hook, `.gitignore`, this plan.
-  *Checkpoint:* rules agreed.
+      _Checkpoint:_ rules agreed.
 - [ ] **1 · Skeleton that boots** — pnpm workspace, `contracts`, four minimal apps, compose with Postgres + healthchecks.
-  *Checkpoint:* `docker compose up` → 5 containers healthy, `:3000` renders, `:3001/health` returns 200.
+      _Checkpoint:_ `docker compose up` → 5 containers healthy, `:3000` renders, `:3001/health` returns 200.
 - [ ] **2 · Data layer** — Prisma schemas, migrations in the entrypoint, seeds.
-  *Checkpoint:* `down -v && up` from cold → tables, demo user, 47 tasks.
+      _Checkpoint:_ `down -v && up` from cold → tables, demo user, 47 tasks.
 - [ ] **3 · Auth end to end** — auth-service (argon2, CAS rotation), gateway DTOs, pipe, filter, interceptor, guard, cookies, RxJS timeout/retry. Tests for rotation.
-  *Checkpoint:* curl signup → login → refresh → me → logout, every status code correct.
+      _Checkpoint:_ curl signup → login → refresh → me → logout, every status code correct.
 - [ ] **4 · Tasks end to end** — CRUD, completion, list query. Tests for the query builder and completion transitions.
-  *Checkpoint:* curl CRUD, pagination, filter, sort, and a `404` on another user's task.
+      _Checkpoint:_ curl CRUD, pagination, filter, sort, and a `404` on another user's task.
 - [ ] **5 · Frontend auth** — Next + Mantine + Tally tokens, login/signup, session restore, single-flight refresh interceptor.
-  *Checkpoint:* log in in the browser; survives a hard refresh.
+      _Checkpoint:_ log in in the browser; survives a hard refresh.
 - [ ] **6 · Frontend tasks** — dashboard, create/edit/delete/complete, pagination, filter, sort, search, loading states, toasts, responsive.
-  *Checkpoint:* the brief's four frontend requirements demonstrated at 360 / 768 / 1280.
+      _Checkpoint:_ the brief's four frontend requirements demonstrated at 360 / 768 / 1280.
 - [ ] **7 · Bonus** — throttler, cache on the list endpoint, retry audit.
-  *Checkpoint:* `429` on rapid auth; cache hit visible in logs.
+      _Checkpoint:_ `429` on rapid auth; cache hit visible in logs.
 - [ ] **8 · Ship** — README, fresh-clone test on a clean machine, invite reviewers.
-  *Checkpoint:* you clone it somewhere clean and it runs.
+      _Checkpoint:_ you clone it somewhere clean and it runs.
 
 ## README (required sections)
 
