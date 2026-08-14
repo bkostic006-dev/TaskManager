@@ -117,10 +117,23 @@ Each stage ends in something runnable and gets reviewed before the next begins.
       `prisma generate` **after** its install. Without this the image starts and fails on
       first query.
       _Checkpoint:_ `down -v && up` from cold → tables, demo user, 47 tasks.
-- [ ] **3 · Auth end to end** — auth-service (argon2, CAS rotation), gateway DTOs, pipe, filter, interceptor, guard, cookies, RxJS timeout/retry. Tests for rotation.
-      **Must add `JWT_SECRET` to compose and `.env.example`** with a `${JWT_SECRET:-dev-only-…}`
-      fallback, shared by auth-service (signing) and gateway (verification) — otherwise the
-      zero-step boot breaks for the reviewer on the first protected request.
+- [x] **3 · Auth end to end** — auth-service (argon2, CAS rotation), gateway DTOs, pipe, filter, interceptor, guard, cookies, RxJS timeout/retry. Tests for rotation. — `833583e` … `60a5078`
+      `JWT_SECRET` added to compose and `.env.example` with a `${JWT_SECRET:-dev-only-…}`
+      fallback, shared by auth-service (signing) and gateway (verification). The fallback
+      lives **only** in compose: both apps read it with `getOrThrow`, so a real deployment
+      cannot inherit the placeholder by forgetting to set it.
+      _Verified:_ cold `down -v && up --build --wait` → 5/5 healthy in 37s · full curl path
+      green — signup `201` + httpOnly cookie scoped to `/auth` (and no refresh token in the
+      body) · duplicate `409` · login `200` · wrong password `401` · unknown email the
+      **byte-identical** `401` at 107.8ms against 109.2ms for a real account, so the dummy
+      hash closes the timing oracle · `/auth/me` `401`/`200` · refresh `200` with a rotated
+      cookie · replayed cookie `401` · logout `204` · malformed signup `400` with per-field
+      `details`. **Six simultaneous refreshes of one token → exactly one `200` and five
+      `401`s**, which is the compare-and-swap holding against real Postgres rather than
+      against a mock. `pnpm lint`, `pnpm -r typecheck`, 26 tests green.
+      _Deviation worth noting:_ logout answers `204` even when revocation fails upstream.
+      A user told `503` cannot leave the state, and the cookie is cleared regardless; the
+      unrevoked token expires on its own. Logged, not silently dropped.
       _Checkpoint:_ curl signup → login → refresh → me → logout, every status code correct.
 - [ ] **4 · Tasks end to end** — CRUD, completion, list query. Tests for the query builder and completion transitions.
       _Checkpoint:_ curl CRUD, pagination, filter, sort, and a `404` on another user's task.
