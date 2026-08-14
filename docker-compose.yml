@@ -14,6 +14,7 @@ services:
   postgres:
     image: postgres:17-alpine
     restart: unless-stopped
+    networks: [internal]
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-tally}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tally_dev_only_not_a_secret}
@@ -38,6 +39,7 @@ services:
       context: .
       dockerfile: apps/auth-service/Dockerfile
     restart: unless-stopped
+    networks: [internal]
     environment:
       NODE_ENV: production
       PORT: 4001
@@ -65,6 +67,7 @@ services:
       context: .
       dockerfile: apps/task-service/Dockerfile
     restart: unless-stopped
+    networks: [internal]
     environment:
       NODE_ENV: production
       PORT: 4002
@@ -90,6 +93,10 @@ services:
       context: .
       dockerfile: apps/gateway/Dockerfile
     restart: unless-stopped
+    # The only service on both networks: it is the bridge, which is what makes
+    # "reachable only via the gateway" a property of the topology rather than a
+    # promise. web cannot address auth-service, task-service or postgres at all.
+    networks: [edge, internal]
     ports:
       - '${GATEWAY_PORT:-3001}:3001'
     environment:
@@ -127,6 +134,7 @@ services:
         # the gateway's published port cannot silently orphan the frontend.
         NEXT_PUBLIC_API_URL: http://localhost:${GATEWAY_PORT:-3001}
     restart: unless-stopped
+    networks: [edge]
     ports:
       - '${WEB_PORT:-3000}:3000'
     environment:
@@ -148,6 +156,17 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
+
+networks:
+  # Reachable from the host: the browser talks to web, and web's baked API URL
+  # points the browser at the gateway.
+  edge:
+  # `internal: true` removes the gateway to the outside world entirely, so the
+  # database and the two domain services have no route off this segment. It also
+  # means only the gateway can reach them, which is the brief's "only accessible
+  # ... via the API Gateway" expressed as network topology.
+  internal:
+    internal: true
 
 volumes:
   postgres-data:

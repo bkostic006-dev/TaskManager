@@ -105,13 +105,27 @@ Each stage ends in something runnable and gets reviewed before the next begins.
 - [ ] **1 · Skeleton that boots** — pnpm workspace, `contracts`, four minimal apps, compose with Postgres + healthchecks.
       _Checkpoint:_ `docker compose up` → 5 containers healthy, `:3000` renders, `:3001/health` returns 200.
 - [ ] **2 · Data layer** — Prisma schemas, migrations in the entrypoint, seeds.
+      **Also owns the Dockerfile change Prisma forces**: the runtime stage does its own
+      `--prod` install and copies only `dist/`, so a client generated in the build stage
+      never arrives. The runtime stage must copy `apps/<svc>/prisma/`, keep `prisma` as a
+      production dependency (the CLI is needed for `migrate deploy`), and run
+      `prisma generate` **after** its install. Without this the image starts and fails on
+      first query.
       _Checkpoint:_ `down -v && up` from cold → tables, demo user, 47 tasks.
 - [ ] **3 · Auth end to end** — auth-service (argon2, CAS rotation), gateway DTOs, pipe, filter, interceptor, guard, cookies, RxJS timeout/retry. Tests for rotation.
+      **Must add `JWT_SECRET` to compose and `.env.example`** with a `${JWT_SECRET:-dev-only-…}`
+      fallback, shared by auth-service (signing) and gateway (verification) — otherwise the
+      zero-step boot breaks for the reviewer on the first protected request.
       _Checkpoint:_ curl signup → login → refresh → me → logout, every status code correct.
 - [ ] **4 · Tasks end to end** — CRUD, completion, list query. Tests for the query builder and completion transitions.
       _Checkpoint:_ curl CRUD, pagination, filter, sort, and a `404` on another user's task.
 - [ ] **5 · Frontend auth** — Next + Mantine + Tally tokens, login/signup, session restore, single-flight refresh interceptor.
-      _Checkpoint:_ log in in the browser; survives a hard refresh.
+      **Owns the brief's "API interaction should be abstracted using reusable hooks or
+      service functions"** as a named deliverable, not a side effect: one `api-client.ts`
+      holding the axios instance and the refresh interceptor, and typed hooks over it.
+      Installing TanStack Query does not satisfy this on its own.
+      _Checkpoint:_ log in in the browser; survives a hard refresh, and no component calls
+      `fetch`/axios directly.
 - [ ] **6 · Frontend tasks** — dashboard, create/edit/delete/complete, pagination, filter, sort, search, loading states, toasts, responsive.
       _Checkpoint:_ the brief's four frontend requirements demonstrated at 360 / 768 / 1280.
 - [ ] **7 · Bonus** — throttler, cache on the list endpoint, retry audit.

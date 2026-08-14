@@ -22,7 +22,7 @@ The first run builds four images including a production Next.js build, so expect
 docker compose down -v
 ```
 
-Only the web app (`:3000`) and the gateway (`:3001`) are published. PostgreSQL and the two internal services are reachable only on the compose network — which is both the architecture the brief asks for and the reason a PostgreSQL already running on the host cannot collide with this one.
+Only the web app (`:3000`) and the gateway (`:3001`) are published. Compose puts the containers on two networks: `edge` carries the browser-facing traffic, while `internal` is marked `internal: true` and holds PostgreSQL and the two domain services. The gateway is the only container on both. So the frontend cannot address `auth-service`, `task-service` or the database at all — the service names do not even resolve from it — which makes "only accessible via the API Gateway" a property of the topology rather than a convention. Not publishing PostgreSQL also means a database already running on the host cannot collide with this one.
 
 Ports are overridable if 3000 or 3001 are taken: `WEB_PORT=4000 GATEWAY_PORT=4001 docker compose up --build`. See `.env.example`.
 
@@ -41,13 +41,13 @@ flowchart TD
 
 The gateway is the only publicly reachable backend surface. It owns request validation, authentication guards, request logging, and exception filtering; the two services behind it hold domain logic and own their own database. Shared types cross service boundaries only through the `@tally/contracts` package — no service imports from another.
 
-| Path                 | What                                                        |
-| -------------------- | ----------------------------------------------------------- |
-| `apps/web`           | Next.js 15 · React 19 · Mantine 8 · TanStack Query           |
-| `apps/gateway`       | NestJS 11 — the public API surface                          |
-| `apps/auth-service`  | NestJS 11 — users, JWTs, refresh-token rotation             |
-| `apps/task-service`  | NestJS 11 — task CRUD, completion, pagination                |
-| `packages/contracts` | Shared types, route constants, error codes                   |
+| Path                 | What                                               |
+| -------------------- | -------------------------------------------------- |
+| `apps/web`           | Next.js 15 · React 19 · Mantine 8 · TanStack Query |
+| `apps/gateway`       | NestJS 11 — the public API surface                 |
+| `apps/auth-service`  | NestJS 11 — users, JWTs, refresh-token rotation    |
+| `apps/task-service`  | NestJS 11 — task CRUD, completion, pagination      |
+| `packages/contracts` | Shared types, route constants, error codes         |
 
 ## Key design decisions and trade-offs
 
@@ -60,3 +60,7 @@ _(Written at the end of each stage, while the argument is fresh.)_
 ## Known limitations and future improvements
 
 _(Collected as we go.)_
+
+- **Building the web image needs network access to Google Fonts.** `next/font/google` downloads the two typefaces at build time and self-hosts them, so the running container never calls out — but `docker compose up` does, on the first build. Vendoring the `woff2` files and switching to `next/font/local` would remove the dependency entirely.
+- **The gateway trusts itself.** Access tokens are verified at the gateway, which then passes `userId` to the services over the internal network. The services do not independently verify the caller. That is safe here because the `internal` network is unreachable from outside the gateway, but a production deployment would either verify the JWT in each service or require a signed internal credential.
+- **HS256 with a shared secret.** Symmetric signing means every service that verifies a token could also mint one. RS256 with a published JWKS would let services verify without holding signing power.
