@@ -23,6 +23,7 @@ pnpm --filter <service> exec prisma migrate dev --name <name>
 - **`docker` may not be on PATH** — full path is `C:\Program Files\Docker\Docker\resources\bin\docker.exe`. Docker Desktop must be running before any `docker` command works.
 - **`pnpm --filter @tally/web build` fails on the host** with `EPERM … symlink`. Next's standalone output creates symlinks, which Windows blocks without Developer Mode. It builds correctly inside Docker, so this never affects what ships — but `pnpm -r build` will always show that one failure locally.
 - A **native PostgreSQL already owns port 5432** here. It cannot collide with ours, because compose never publishes the database.
+- **No `python` and no `jq`.** Verification scripts that parse JSON have to use `grep`/`cut`/`sed`, or Node. The Windows Store shim answers `python` and prints an advert instead of failing, so a script using it appears to run and silently produces empty variables.
 
 ## Hard rules
 
