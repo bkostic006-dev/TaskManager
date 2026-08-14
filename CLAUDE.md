@@ -17,6 +17,13 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up postgres
 pnpm --filter <service> exec prisma migrate dev --name <name>
 ```
 
+## Environment quirks (this machine)
+
+- **`pnpm` is not on PATH** — invoke it as `corepack pnpm …`.
+- **`docker` may not be on PATH** — full path is `C:\Program Files\Docker\Docker\resources\bin\docker.exe`. Docker Desktop must be running before any `docker` command works.
+- **`pnpm --filter @tally/web build` fails on the host** with `EPERM … symlink`. Next's standalone output creates symlinks, which Windows blocks without Developer Mode. It builds correctly inside Docker, so this never affects what ships — but `pnpm -r build` will always show that one failure locally.
+- A **native PostgreSQL already owns port 5432** here. It cannot collide with ours, because compose never publishes the database.
+
 ## Hard rules
 
 - **Services never import from each other.** Shared types go through `@tally/contracts`.
