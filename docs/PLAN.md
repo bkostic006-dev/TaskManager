@@ -100,10 +100,12 @@ These cost real time if discovered late. All six came out of an adversarial revi
 
 Each stage ends in something runnable and gets reviewed before the next begins.
 
-- [ ] **0 · Harness** — `CLAUDE.md`, format hook, `.gitignore`, this plan.
-      _Checkpoint:_ rules agreed.
-- [ ] **1 · Skeleton that boots** — pnpm workspace, `contracts`, four minimal apps, compose with Postgres + healthchecks.
-      _Checkpoint:_ `docker compose up` → 5 containers healthy, `:3000` renders, `:3001/health` returns 200.
+- [x] **0 · Harness** — `CLAUDE.md`, format hook, `.gitignore`, this plan. — `1d88858`
+- [x] **1 · Skeleton that boots** — pnpm workspace, `contracts`, four minimal apps, compose with
+      Postgres, healthchecks, and a segmented network. — `24ce9f9` … `89dc08d`
+      _Verified:_ cold `down -v && up --wait` → 5/5 healthy in 24s · `:3001/health` and
+      `:3000/api/health` correct · both databases created · `web` cannot resolve
+      `auth-service`/`task-service` · images 388/388/388/453MB.
 - [ ] **2 · Data layer** — Prisma schemas, migrations in the entrypoint, seeds.
       **Also owns the Dockerfile change Prisma forces**: the runtime stage does its own
       `--prod` install and copies only `dist/`, so a client generated in the build stage
@@ -132,6 +134,42 @@ Each stage ends in something runnable and gets reviewed before the next begins.
       _Checkpoint:_ `429` on rapid auth; cache hit visible in logs.
 - [ ] **8 · Ship** — README, fresh-clone test on a clean machine, invite reviewers.
       _Checkpoint:_ you clone it somewhere clean and it runs.
+
+## Brief coverage
+
+Every requirement in `BRIEF.md` and the stage that owns it. This is a map, not a status
+board — status comes from the checkboxes above and from `git log`. Its job is to make an
+orphaned requirement obvious. Re-audited with fresh eyes at stages 4 and 8.
+
+| Brief requirement                                            | Owner   |
+| ------------------------------------------------------------ | ------- |
+| React · TypeScript · Next.js · CSS framework                 | 1 ✓     |
+| Node.js with NestJS                                          | 1 ✓     |
+| Microservice split: gateway, auth service, task service      | 1 ✓     |
+| Docker + docker-compose for local orchestration              | 1 ✓     |
+| PostgreSQL                                                   | 1 ✓ / 2 |
+| Prisma or TypeORM                                            | 2       |
+| Services communicate over a transport layer                  | 3       |
+| Sign up and log in via the API Gateway                       | 3       |
+| JWTs with access + refresh tokens                            | 3       |
+| **Refresh token rotation** (the brief's only "must")         | 3       |
+| Gateway: global validation, request logging, guards, filters | 3       |
+| DTOs and validators                                          | 3       |
+| Consistent HTTP status codes · global exception handling     | 3       |
+| Auth service encapsulates all user logic                     | 3       |
+| Task CRUD + mark complete; completion business logic         | 4       |
+| Pagination with page size and page selector                  | 4 · 6   |
+| Filtering by completion status and keyword                   | 4 · 6   |
+| Sorting by date and completion status                        | 4 · 6   |
+| Task service reachable only via the gateway, authenticated   | 1 ✓ · 4 |
+| API abstracted behind reusable hooks or service functions    | 5       |
+| Fully responsive · loading indicators · toasts               | 6       |
+| Clean architecture across services                           | 3 · 4   |
+| Bonus: rate limiting and caching                             | 7       |
+| Bonus: RxJS for service comms / retry                        | 3 · 7   |
+| README: run locally · trade-offs · limitations               | 1 ✓ · 8 |
+| GitHub repo + access for both reviewers                      | 8       |
+| Clear and meaningful commit history                          | ongoing |
 
 ## README (required sections)
 
