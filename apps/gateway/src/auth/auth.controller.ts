@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Post, Req, Res } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Logger, Post, Req, Res } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Request, Response } from 'express';
 import {
@@ -27,6 +27,7 @@ import { SignupDto } from './dto/signup.dto';
  */
 @Controller(AUTH_ROUTES.base)
 export class AuthController {
+  private readonly logger = new Logger(AuthController.name);
   private readonly webOrigin: string;
 
   constructor(
@@ -82,12 +83,15 @@ export class AuthController {
   }
 
   /**
-   * Ends the session, and clears the cookie whether or not the service agreed.
+   * Ends the session. Always `204`, and always clears the cookie.
    *
-   * A logout that leaves a cookie behind because the auth service was briefly
-   * unreachable is worse than one that revokes nothing: the browser keeps
-   * presenting a credential the user believes is gone. The token expires on its
-   * own; the user's intent is honoured immediately.
+   * Revocation is attempted but its failure is not propagated. A user who
+   * clicks "log out" and is told `503` is left in a state they cannot leave,
+   * still holding a cookie, while the browser has in fact already been cleared
+   * — the error would describe a backend condition as a user-facing failure.
+   * Clearing the cookie is the part that protects them, and it happens either
+   * way; an unrevoked token then simply expires on its own schedule. The
+   * failure is logged rather than silently dropped.
    */
   @Public()
   @Post('logout')
@@ -97,13 +101,20 @@ export class AuthController {
     @Res({ passthrough: true }) response: Response,
   ): Promise<void> {
     const token = this.readRefreshCookie(request);
+    clearRefreshCookie(response, this.webOrigin);
+
+    if (!token) {
+      return;
+    }
 
     try {
-      if (token) {
-        await this.auth.logout(token);
-      }
-    } finally {
-      clearRefreshCookie(response, this.webOrigin);
+      await this.auth.logout(token);
+    } catch (error) {
+      this.logger.warn(
+        `Refresh token could not be revoked; it will expire on its own: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
     }
   }
 
