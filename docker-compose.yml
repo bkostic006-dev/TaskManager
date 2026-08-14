@@ -45,6 +45,12 @@ services:
       PORT: 4001
       # Set now, before Prisma exists, so stage 2 is pure schema work.
       DATABASE_URL: postgresql://${POSTGRES_USER:-tally}:${POSTGRES_PASSWORD:-tally_dev_only_not_a_secret}@postgres:5432/auth_db?schema=public
+      # This service signs access tokens; the gateway verifies them. Same value
+      # on both sides or every protected request is a 401. The default keeps the
+      # reviewer's `docker compose up` a zero-step boot — it is a throwaway, and
+      # the apps themselves refuse to start without the variable, so nothing
+      # outside this file can fall back to it silently.
+      JWT_SECRET: ${JWT_SECRET:-dev-only-not-a-secret-change-me}
     depends_on:
       postgres:
         condition: service_healthy
@@ -104,6 +110,10 @@ services:
       PORT: 3001
       AUTH_SERVICE_URL: http://auth-service:4001
       TASK_SERVICE_URL: http://task-service:4002
+      # Verification side of the pair above. HS256, so this is the signing key
+      # itself — in production it would be RS256 and the gateway would hold only
+      # a public key.
+      JWT_SECRET: ${JWT_SECRET:-dev-only-not-a-secret-change-me}
       # Exact origin, because CORS with credentials cannot use a wildcard.
       WEB_ORIGIN: http://localhost:${WEB_PORT:-3000}
     depends_on:
