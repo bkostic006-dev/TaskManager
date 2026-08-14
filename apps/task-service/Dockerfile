@@ -27,6 +27,9 @@ COPY apps/task-service apps/task-service
 # contracts first: the app resolves @tally/contracts through its dist, so the
 # app build fails outright if this has not run.
 RUN pnpm --filter @tally/contracts build
+# The app's `build` script is `prisma generate && nest build`. The generate is
+# not optional here: src imports the client's types, so tsc has nothing to
+# compile against until the schema has been turned into a client.
 RUN pnpm --filter @tally/task-service build
 
 # ---------------------------------------------------------------- runtime
@@ -40,6 +43,12 @@ RUN pnpm --filter @tally/task-service build
 # webpack and prettier into a "production" tree. So this stage runs its own
 # install: symlinks created here are valid here, and nothing crosses a stage
 # boundary. Only dist/ is copied in.
+#
+# That has a consequence Prisma forces us to handle: the client generated during
+# `build` lives in that stage's node_modules and never arrives. This stage
+# therefore copies the schema and generates its own client, against its own
+# install. `prisma` is a production dependency for the same reason — the CLI has
+# to exist at container start for `migrate deploy`.
 FROM node:22-slim AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
@@ -57,10 +66,17 @@ COPY apps/web/package.json apps/web/
 # 388MB.
 RUN pnpm install --frozen-lockfile --prod --filter @tally/task-service... \
     && pnpm store prune
+
+# Schema and migrations: the first is what `generate` reads, the second is what
+# `migrate deploy` applies on every start.
+COPY apps/task-service/prisma apps/task-service/prisma
+RUN pnpm --filter @tally/task-service exec prisma generate
+
 COPY --from=build /app/packages/contracts/dist packages/contracts/dist
 COPY --from=build /app/apps/task-service/dist apps/task-service/dist
+COPY --chmod=0755 apps/task-service/docker-entrypoint.sh /usr/local/bin/entrypoint.sh
 
 USER node
 WORKDIR /app/apps/task-service
 EXPOSE 4002
-CMD ["node", "dist/main.js"]
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

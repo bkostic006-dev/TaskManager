@@ -1,0 +1,45 @@
+// Task service data model — owns `tasks_db` and nothing else.
+
+generator client {
+  provider = "prisma-client-js"
+
+  // Per-app output: pnpm symlinks both services at one physical @prisma/client
+  // in the virtual store, so the default location has auth's schema and this
+  // one generating over each other. See apps/auth-service/prisma/schema.prisma.
+  output = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Task {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// Deliberately a plain uuid column with NO foreign key to User: that table
+  /// lives in auth_db, a different database owned by a different service, and
+  /// a cross-database constraint would collapse the service boundary into a
+  /// deployment coupling. Referential integrity for this column is the auth
+  /// service's business; the task service treats it as an opaque tenant key
+  /// and scopes every query by it.
+  userId String @db.Uuid
+
+  title       String
+  description String?
+
+  /// `completed` and `completedAt` move together and only through the domain
+  /// actions (/complete, /uncomplete) — re-completing must not re-stamp the
+  /// timestamp, which is why completion is not a plain field edit.
+  completed   Boolean   @default(false)
+  completedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// The list endpoint filters on (userId, completed) and sorts on
+  /// (userId, createdAt). Two composite indexes, one per shape — a lone index
+  /// on userId would leave both queries sorting or filtering in memory.
+  @@index([userId, completed])
+  @@index([userId, createdAt])
+}
