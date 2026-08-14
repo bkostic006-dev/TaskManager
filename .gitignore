@@ -9,6 +9,10 @@ build/
 out/
 *.tsbuildinfo
 
+# Prisma clients, regenerated from prisma/schema.prisma by `pnpm build`,
+# `typecheck` and `test`, and again inside each image's runtime stage.
+apps/*/generated/
+
 # test + coverage output
 coverage/
 

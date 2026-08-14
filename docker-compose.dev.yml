@@ -1,6 +1,7 @@
 # Local development override. The base file deliberately keeps Postgres off the
-# host; this publishes it so `pnpm --filter <app> dev` on the host can talk to
-# the containerised database.
+# host; this publishes it so `pnpm --filter <app> dev` on the host — and
+# `prisma migrate dev`, which authors the migrations in apps/*/prisma — can talk
+# to the containerised database.
 #
 #   docker compose -f docker-compose.yml -f docker-compose.dev.yml up postgres
 #
@@ -9,6 +10,14 @@
 
 services:
   postgres:
+    # Publishing a port on a container attached only to an `internal: true`
+    # network is silently ignored by Docker — the container starts, the binding
+    # never appears, and every host-side connection lands on whatever else owns
+    # 5432. Joining `edge` as well gives the host a route in. Dev only: the base
+    # file leaves Postgres on `internal` alone, which is what makes "only the
+    # gateway can reach the data layer" a property of the topology.
+    networks: [internal, edge]
     ports:
-      # Override POSTGRES_PORT if 5432 is already taken on your machine.
+      # Override POSTGRES_PORT if 5432 is already taken on your machine — a
+      # local Postgres install is the usual culprit.
       - '${POSTGRES_PORT:-5432}:5432'

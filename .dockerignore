@@ -11,6 +11,9 @@ dist
 **/dist
 out
 **/out
+# Prisma clients are generated inside the image, against the image's own
+# node_modules. A host copy would be the wrong platform's engine binary.
+**/generated
 *.tsbuildinfo
 **/*.tsbuildinfo
 
