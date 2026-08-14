@@ -106,7 +106,10 @@ Each stage ends in something runnable and gets reviewed before the next begins.
       _Verified:_ cold `down -v && up --wait` → 5/5 healthy in 24s · `:3001/health` and
       `:3000/api/health` correct · both databases created · `web` cannot resolve
       `auth-service`/`task-service` · images 388/388/388/453MB.
-- [ ] **2 · Data layer** — Prisma schemas, migrations in the entrypoint, seeds.
+- [x] **2 · Data layer** — Prisma schemas, migrations in the entrypoint, seeds. — `242dc84` … `2551267`
+      _Verified:_ cold build + `down -v && up --wait` → 5/5 healthy · both migrations applied ·
+      demo user id equals `DEMO_USER_ID` · 47 tasks (16 done / 31 pending) · **restart leaves
+      47, not 94** · images 883/881MB for the data services (2.05GB total on disk, shared layers).
       **Also owns the Dockerfile change Prisma forces**: the runtime stage does its own
       `--prod` install and copies only `dist/`, so a client generated in the build stage
       never arrives. The runtime stage must copy `apps/<svc>/prisma/`, keep `prisma` as a
