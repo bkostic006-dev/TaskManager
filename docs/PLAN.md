@@ -349,7 +349,37 @@ Each stage ends in something runnable and gets reviewed before the next begins.
       _Checkpoint:_ log in in the browser; survives a hard refresh, and no component calls
       `fetch`/axios directly. Also load the app with StrictMode on and confirm the session
       survives the double-invoked boot refresh.
-- [ ] **6 · Frontend tasks** — dashboard, create/edit/delete/complete, pagination, filter, sort, search, loading states, toasts, responsive.
+- [ ] **6 · Frontend tasks** — dashboard, create/edit/delete/complete, pagination, filter, sort,
+      search, loading states, toasts, responsive. — **CODE COMPLETE, CHECKPOINT OPEN.**
+      `0d53269` … `e363be5`
+      The implementing agent was cut off by a session limit at the moment it began browser
+      verification, so the code exists and the checkpoint does not. Left unticked deliberately:
+      this stage's checkpoint is a browser, and nothing here has met one.
+      _Verified by the orchestrator, without a browser:_ `pnpm lint`, `pnpm -r typecheck`, **64
+      tests** green (56 before) · `docker compose up -d --build web` succeeds and the container
+      is healthy · the stage-6 UI is genuinely in the shipped bundle, not merely on disk —
+      "Search tasks", "What needs doing" and "per page" all appear in the built output, and
+      `/tasks`, `pageSize`, `sortBy` and `uncomplete` all appear in the static chunks · no file
+      under `app/` or `components/` imports `apiClient` or calls `fetch`, checked for **relative
+      as well as alias** imports this time.
+      _The two state-transition guards were mutation-tested, per the standard set in stage 5:_
+      making a narrowing change skip the page reset fails exactly two tests; making
+      `pageWithinBounds` return its input unchanged fails a third. Restored and green.
+      **Still unmet — every one needs a human with a browser.** These are the stage's checkpoint,
+      not a postscript, and five of them were already carried forward unverified from stage 5:
+      1. a real click-through — `/` bounces to `/login`, demo credentials, land on `/dashboard`
+      2. a real browser sends and stores the refresh cookie on the cross-origin XHR
+      3. StrictMode double-invoke under `next dev` does not log you out (trap 1)
+      4. hard refresh keeps you signed in, as a gesture
+      5. toasts appear, submit shows a loading state, redirects fire
+      6. responsive at 360 / 768 / 1280
+      7. every task operation from the UI: create, edit, delete, complete, uncomplete
+      8. the controls **compose** — search + status filter + page 2 together
+      9. empty state (a search matching nothing) and error state both render
+      _Noted, not fixed:_ `components/dashboard/task-drawer.tsx` imports the `ApiRequestError`
+      **type** from `lib/api-client`. It does not import `apiClient` and makes no request, so the
+      abstraction requirement holds, but the error type would sit better in `lib/form-errors.ts`
+      alongside the helper that already maps it.
       **The softest estimate in this plan.** Every prior version of this stage ran roughly 2×
       over, because judging a rendered page is a human loop that does not compress. Budget for
       that rather than discovering it.
