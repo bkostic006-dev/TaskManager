@@ -14,7 +14,13 @@ cd TaskManager
 docker compose up
 ```
 
-Then open <http://localhost:3000>.
+Then open <http://localhost:3000> and sign in with the seeded demo account:
+
+| Email               | Password          |
+| ------------------- | ----------------- |
+| `dana@northbay.dev` | `tally-demo-2026` |
+
+It comes with 47 tasks (16 done, 31 pending), which is enough to exercise pagination, filtering and sorting without creating anything first. Signing up for a fresh account works too — it just starts empty.
 
 The first run builds four images including a production Next.js build, so expect a few minutes; subsequent starts take about 25 seconds. To reset everything, including the database:
 
@@ -61,6 +67,10 @@ _(Written at the end of each stage, while the argument is fresh.)_
 
 **Rotation is a compare-and-swap, not a read-then-write.** Every refresh revokes the presented token and issues a replacement. Two concurrent refreshes of the same token would both pass a separate "is it revoked?" check, so the revocation is a single `UPDATE ... WHERE revokedAt IS NULL AND expiresAt > now`, and the affected-row count is the caller's only proof it won. Verified under eight simultaneous refreshes: one `200`, seven `401`.
 
+**Rotation is also one transaction.** The revoke, the insert of the replacement, and the link between them commit together. Sequenced separately, any failure after the revoke — including the gateway abandoning the call at its three-second timeout while the service carries on — would destroy the user's only credential without delivering its replacement, logging them out with a `500` they cannot retry, because the token a retry would present is already dead. The compare-and-swap is unaffected: `updateMany`'s rowcount is still the verdict inside a transaction, since the losing caller blocks on the row lock and re-evaluates the predicate after the winner commits.
+
+**The gateway accepts JSON and nothing else.** Nest registers a `urlencoded` body parser by default, and `application/x-www-form-urlencoded` is one of the content types a cross-origin `<form method="POST">` can send with no preflight. That made login CSRF possible: a page on any origin could post the attacker's credentials to `/auth/login`, and the victim's browser would store the resulting `Set-Cookie` — silently signing them into the attacker's account, where every task they then created would be readable by its owner. CORS does not help, because it hides the response the attacker never needed to read. The gateway boots with `bodyParser: false` and re-registers only `express.json()`, so such a request cannot be made without a preflight — and a preflight is something CORS can refuse.
+
 **One PostgreSQL container, two databases.** `auth_db` and `tasks_db` are owned by their respective services with no foreign key between them: `Task.userId` is a plain column, not a reference. This demonstrates the service boundary honestly while keeping the reviewer to a single container.
 
 ## Known limitations and future improvements
@@ -73,3 +83,5 @@ _(Collected as we go.)_
 - **Access tokens cannot be revoked before they expire.** The gateway verifies them locally with no denylist, which is what keeps every request free of an auth-service round trip. A token stolen mid-session stays usable for up to 15 minutes. A `jti` denylist in a shared cache is the standard fix.
 - **Reuse of a revoked refresh token returns `401` but does not revoke the rest of the chain.** The `replacedById` links are recorded, so revoking a whole lineage on reuse is a small addition — it is left out because a naive implementation logs users out on ordinary parallel refreshes.
 - **HS256 with a shared secret.** Symmetric signing means every service that verifies a token could also mint one. RS256 with a published JWKS would let services verify without holding signing power.
+- **The shipped `JWT_SECRET` is a development-only placeholder.** `docker-compose.yml` falls back to a literal value that is committed to this repository, which is what makes `docker compose up` work with no `.env` step. While that value is in use, anyone holding a copy of the repo can forge an access token for any user id — including the demo account's, which is a published constant. Both backends log a warning at boot when they are started with it. Set `JWT_SECRET` (`openssl rand -base64 32`) for anything that is not a local demo. Keeping the zero-step boot was a deliberate trade for a reviewer-facing project; a real deployment would remove the fallback and let the container fail to start.
+- **Signup is not enumeration-resistant, so login's timing defence is only half a defence.** `/auth/login` deliberately costs a full argon2 verification even for an unknown email, so response time cannot be used to discover which addresses have accounts. `/auth/signup` then answers `409` for an address that is taken, which discloses exactly the same fact directly. Closing it properly means always answering `201` and sending a "someone tried to register your address" email instead — real, and out of scope here. The login defence is still worth keeping (it is the endpoint an attacker scripts), but the API as a whole does not resist enumeration and this README would rather say so than imply otherwise.
