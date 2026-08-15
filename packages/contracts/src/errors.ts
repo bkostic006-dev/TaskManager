@@ -15,6 +15,13 @@ export enum ErrorCode {
   Conflict = 'CONFLICT',
   /** Request shape or values rejected by a DTO validator. */
   Validation = 'VALIDATION',
+  /**
+   * The request body was larger than the gateway's parser accepts. Distinct
+   * from {@link ErrorCode.Validation} because nothing about the *content* was
+   * examined — the body was refused before it was read, so there are no
+   * per-field `details` to give and no smaller edit that fixes it.
+   */
+  PayloadTooLarge = 'PAYLOAD_TOO_LARGE',
   /** A downstream service was unreachable or exceeded its timeout budget. */
   Upstream = 'UPSTREAM_UNAVAILABLE',
   /** Anything unplanned. Carries no detail outward — never leak a stack. */
@@ -49,6 +56,7 @@ export const ERROR_STATUS: Record<ErrorCode, number> = {
   [ErrorCode.Unauthorized]: 401,
   [ErrorCode.NotFound]: 404,
   [ErrorCode.Conflict]: 409,
+  [ErrorCode.PayloadTooLarge]: 413,
   [ErrorCode.Internal]: 500,
   [ErrorCode.Upstream]: 503,
 };
