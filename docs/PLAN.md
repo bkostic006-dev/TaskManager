@@ -119,23 +119,85 @@ Each stage ends in something runnable and gets reviewed before the next begins.
       _Checkpoint:_ `down -v && up` from cold → tables, demo user, 47 tasks.
 - [x] **3 · Auth end to end** — auth-service (argon2, CAS rotation), gateway DTOs, pipe, filter, interceptor, guard, cookies, RxJS timeout/retry. Tests for rotation. — `833583e` … `60a5078`
       `JWT_SECRET` added to compose and `.env.example` with a `${JWT_SECRET:-dev-only-…}`
-      fallback, shared by auth-service (signing) and gateway (verification). The fallback
-      lives **only** in compose: both apps read it with `getOrThrow`, so a real deployment
-      cannot inherit the placeholder by forgetting to set it.
+      fallback, shared by auth-service (signing) and gateway (verification).
+      ~~The fallback lives **only** in compose: both apps read it with `getOrThrow`, so a real
+      deployment cannot inherit the placeholder by forgetting to set it.~~ **False, corrected in
+      the fix pass below.** `getOrThrow` never fires, because the documented run path always
+      supplies the variable — compose's own default is what it reads. Both apps now compare the
+      configured secret against the placeholder at boot and warn loudly instead.
       _Verified:_ cold `down -v && up --build --wait` → 5/5 healthy in 37s · full curl path
       green — signup `201` + httpOnly cookie scoped to `/auth` (and no refresh token in the
       body) · duplicate `409` · login `200` · wrong password `401` · unknown email the
       **byte-identical** `401` at 107.8ms against 109.2ms for a real account, so the dummy
       hash closes the timing oracle · `/auth/me` `401`/`200` · refresh `200` with a rotated
       cookie · replayed cookie `401` · logout `204` · malformed signup `400` with per-field
-      `details`. **Six simultaneous refreshes of one token → exactly one `200` and five
+      `details`. **Eight simultaneous refreshes of one token → exactly one `200` and seven
       `401`s**, which is the compare-and-swap holding against real Postgres rather than
       against a mock. `pnpm lint`, `pnpm -r typecheck`, 26 tests green.
+      (The concurrency check was run at six and again at eight; eight is the number the README
+      and this document both quote, and the one the fix pass re-ran.)
       _Deviation worth noting:_ logout answers `204` even when revocation fails upstream.
       A user told `503` cannot leave the state, and the cookie is cleared regardless; the
       unrevoked token expires on its own. Logged, not silently dropped.
       _Checkpoint:_ curl signup → login → refresh → me → logout, every status code correct.
+- [x] **3.5 · Fix pass** — no new surface, only defects found by a cold brief-compliance audit
+      and an adversarial security review of everything stages 0–3 shipped. Nothing was
+      **violated** against the brief; these were real bugs behind a passing checkpoint.
+      _Security:_ login CSRF closed by refusing form-encoded bodies (`bodyParser: false` plus
+      `express.json()`) — the urlencoded parser Nest registers by default made
+      `POST /auth/login` a CORS *simple* request, so a cross-origin form could log a victim into
+      the attacker's account · rotation's revoke/insert/link made one transaction, so a failure
+      after the revoke can no longer strand a user with a burned token · JWT verification pinned
+      to `HS256` with `issuer`/`audience`, ahead of the RS256 migration where an unpinned
+      algorithm list becomes algorithm confusion · the placeholder `JWT_SECRET` now warns at
+      boot and is documented as a limitation, replacing a comment that claimed a protection
+      which did not exist.
+      _Correctness:_ `/auth/me` answers `401` rather than `404` for a deleted account, so a
+      client clears its session instead of looping · malformed JSON is `400 VALIDATION`, not
+      `400 INTERNAL` · the auth service validates `refreshToken` before dereferencing it
+      (an empty `POST` was a `TypeError` → `500`) · ids are `encodeURIComponent`-escaped into
+      internal URLs, and a non-uuid `sub` is rejected before it reaches a `@db.Uuid` column ·
+      `WEB_ORIGIN` is required rather than defaulted, and the refresh cookie's `Secure` now
+      comes from an explicit `COOKIE_SECURE` instead of being inferred from another origin's
+      scheme.
+      _Verified:_ `pnpm lint`, `pnpm -r typecheck`, **31 tests** green (26 before; the five new
+      ones cover the rotation transaction, the pinned issuer/audience, the refused form post,
+      and `/auth/me`'s `401`). Cold `down -v && up -d --build --wait` → **5/5 healthy in 183s**
+      (a full rebuild; the earlier 37s figure was an incremental one). Both backends log the
+      placeholder-secret warning at boot. Full auth path re-run against the running stack,
+      **18/18** — signup `201` with an httpOnly cookie scoped to `/auth` and no refresh token
+      in the body · duplicate `409` · login `200` · wrong password and unknown email the same
+      `401` · `/auth/me` `401`/`200` · the README's demo credentials `200` · malformed signup
+      `400` with per-field details · refresh `200` and rotated · replay `401` · logout `204`
+      with the cookie cleared · refresh after logout `401`.
+      _The two fixes that needed proving, not asserting:_ a form-encoded
+      `POST /auth/login` is refused **`400 VALIDATION` with no `Set-Cookie`**, which is the CSRF
+      path closed · **eight simultaneous refreshes of one token → exactly one `200` and seven
+      `401`s**, so the compare-and-swap still holds now that it runs inside a transaction.
+      _Also verified by forging tokens with the placeholder secret_ (it is published, which is
+      the point): a valid signature naming a non-existent account is `401` not `404`; a non-uuid
+      `sub` is `401` not `500`; and a correctly signed token with the wrong issuer, the wrong
+      audience, or neither is refused. The control case — a forged token for `DEMO_USER_ID`
+      returning `200` — is why the placeholder is now a documented README limitation.
+      _Two claims checked rather than trusted, per the compliance rule:_ an empty `POST` and a
+      bodyless `POST` to the auth service's internal `refresh` and `logout` (issued from inside
+      the gateway container, which is the only thing that can reach them) both answer
+      `400 VALIDATION` instead of crashing · the gateway really does refuse to boot on a bad
+      config — `COOKIE_SECURE=maybe` exits 1 with `COOKIE_SECURE must be "true" or "false"`, and
+      an unset `WEB_ORIGIN` exits 1 with `Configuration key "WEB_ORIGIN" does not exist`.
+      No `ERROR` or unhandled exception in any service log across the whole run.
 - [ ] **4 · Tasks end to end** — CRUD, completion, list query. Tests for the query builder and completion transitions.
+      **Two things this stage must build that are easy to miss, both found by the stage-3 audit:**
+      1. **task-service needs its own `DomainExceptionFilter`.** auth-service registers one via
+         `APP_FILTER` in its `app.module.ts`; task-service has no equivalent. Without it a
+         `DomainError` leaves as an unshaped `500`, the gateway's `UpstreamService` cannot read
+         an `error` code it recognises back off the body, and every domain failure becomes
+         `503`. "Another user's task is `404`" would silently become `503` — which is precisely
+         what this stage's checkpoint tests, so it would fail in a way that looks like a
+         networking problem.
+      2. **Numeric query fields need `@Type(() => Number)`.** The gateway's global pipe sets
+         `transform: true` but not `enableImplicitConversion`, so `page=1` arrives as the
+         string `'1'` and fails `@IsInt()` with a `400`. Applies to `page` and `pageSize`.
       _Checkpoint:_ curl CRUD, pagination, filter, sort, and a `404` on another user's task.
 - [ ] **5 · Frontend auth** — Next + Mantine + Tally tokens, login/signup, session restore, single-flight refresh interceptor.
       **Owns the brief's "API interaction should be abstracted using reusable hooks or
@@ -147,7 +209,16 @@ Each stage ends in something runnable and gets reviewed before the next begins.
 - [ ] **6 · Frontend tasks** — dashboard, create/edit/delete/complete, pagination, filter, sort, search, loading states, toasts, responsive.
       _Checkpoint:_ the brief's four frontend requirements demonstrated at 360 / 768 / 1280.
 - [ ] **7 · Bonus** — throttler, cache on the list endpoint, retry audit.
-      _Checkpoint:_ `429` on rapid auth; cache hit visible in logs.
+      **The cache is a tenancy bug waiting to happen.** NestJS's `CacheInterceptor` keys on the
+      request URL, and `GET /tasks?page=1` is byte-identical for every user — the identity lives
+      in the `Authorization` header, which the default key never sees. Dropped in naively, the
+      first user to load page 1 fills the cache and the second is served *their rows*. The whole
+      point of "every task query is scoped by the JWT's `userId`" is undone by a decorator added
+      for a bonus mark. Either override `trackBy` to fold `request.user.userId` into the key, or
+      cache inside the task service where the query already carries the user. **Needs a test that
+      two different users issuing the identical query string get different rows** — a cache-hit
+      log line proves the cache works, not that it is safe.
+      _Checkpoint:_ `429` on rapid auth; cache hit visible in logs; the two-user cache test green.
 - [ ] **8 · Ship** — README, fresh-clone test on a clean machine, invite reviewers.
       _Checkpoint:_ you clone it somewhere clean and it runs.
 
