@@ -25,6 +25,9 @@ const CREDENTIALS_REJECTED = "That email and password don't match.";
 /** Same message for every unusable refresh token: absent, dead, or expired. */
 const SESSION_REJECTED = 'That session has expired. Log in again.';
 
+/** Any RFC 4122 variant, which is what the `@db.Uuid` column will accept. */
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
  * All user-related logic in the system, per the brief's split of
  * responsibilities. Nothing here knows about HTTP status codes or cookies:
@@ -173,10 +176,27 @@ export class AuthService {
   }
 
   /**
-   * @throws DomainError `NotFound` when the id has no account — reachable only
-   * if a user was deleted while holding an unexpired access token.
+   * Looks up an account by id, for the gateway's `/auth/me`.
+   *
+   * The shape check is not redundant with the database. `id` reaches a
+   * `@db.Uuid` column, and Postgres rejects a value it cannot parse as a uuid
+   * with an error Prisma raises as an unhandled failure — so an id like
+   * `not-a-uuid` would leave here as `500` rather than as an answer. The
+   * gateway only ever passes the `sub` of a verified token, so this is
+   * unreachable in normal use; it is here because "unreachable" is exactly the
+   * kind of claim that turns out to be false, and the cost is one regex.
+   *
+   * @throws DomainError `NotFound` when the id is malformed or has no account —
+   * otherwise reachable only if a user was deleted while holding an unexpired
+   * access token. The gateway turns that into a `401`, because a client with a
+   * valid token for a vanished account needs to be told to log in again, not
+   * that a page is missing.
    */
   async findUser(id: string): Promise<AuthUser> {
+    if (!UUID_PATTERN.test(id)) {
+      throw new DomainError(ErrorCode.NotFound, 'That account no longer exists.');
+    }
+
     const user = await this.repository.findUserById(id);
     if (!user) {
       throw new DomainError(ErrorCode.NotFound, 'That account no longer exists.');
