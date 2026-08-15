@@ -124,9 +124,30 @@ export class AuthController {
     }
   }
 
+  /**
+   * The account behind the presented access token.
+   *
+   * A token that verifies but names an account that no longer exists is a
+   * `401`, not the `404` the auth service raises for the same lookup. The
+   * difference is what the client can do about it: `404` reads as "this page
+   * is missing" and leaves the session in place, so a web client that refreshes
+   * `/auth/me` on load loops on a credential that will never work again. `401`
+   * is the one status the whole frontend already treats as "clear the session
+   * and log in".
+   *
+   * @throws DomainError `Unauthorized` when the token is missing or invalid
+   * (from the guard), or when its subject has been deleted.
+   */
   @Get('me')
-  me(@CurrentUser() user: RequestUser): Promise<AuthUser> {
-    return this.auth.findUser(user.userId);
+  async me(@CurrentUser() user: RequestUser): Promise<AuthUser> {
+    try {
+      return await this.auth.findUser(user.userId);
+    } catch (error) {
+      if (error instanceof DomainError && error.code === ErrorCode.NotFound) {
+        throw new DomainError(ErrorCode.Unauthorized, 'That session has expired. Log in again.');
+      }
+      throw error;
+    }
   }
 
   /**
