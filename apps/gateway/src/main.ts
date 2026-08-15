@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import express from 'express';
 import { DEV_ONLY_JWT_SECRET } from '@tally/contracts';
 import { AppModule } from './app.module';
+import { JSON_BODY_LIMIT } from './common/json-body';
 
 /** Fallback when PORT is unset; matches the port compose wires this app to. */
 const DEFAULT_PORT = 3001;
@@ -23,8 +24,12 @@ async function bootstrap(): Promise<void> {
   // Refusing form encoding removes the no-preflight path entirely. A JSON body
   // from another origin is a preflighted request, and the preflight is what
   // `enableCors` below actually gets to refuse.
+  //
+  // The explicit `limit` is the second half: over it, the parser refuses the
+  // body, and `AllExceptionsFilter` turns that refusal into a `413`. See
+  // JSON_BODY_LIMIT for why the default is not the number we want.
   const app = await NestFactory.create(AppModule, { bodyParser: false });
-  app.use(express.json());
+  app.use(express.json({ limit: JSON_BODY_LIMIT }));
 
   const config = app.get(ConfigService);
 
