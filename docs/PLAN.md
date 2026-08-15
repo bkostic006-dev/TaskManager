@@ -306,8 +306,14 @@ Each stage ends in something runnable and gets reviewed before the next begins.
       single-flight refresh interceptor. — `4e9da83` … `d596f07`
       _Verified, re-run by the orchestrator:_ the abstraction is real and mechanical — `axios`
       appears in `apps/web/src` only in `lib/api-client.ts` (plus its spec and the manual live
-      check), `fetch(` and `XMLHttpRequest` appear nowhere, and only `hooks/use-auth.ts` imports
-      the client; every page and component goes through a hook · `/login` and `/signup` serve
+      check), `fetch(` and `XMLHttpRequest` appear nowhere, and **nothing under `app/` or
+      `components/` imports the client** — the three modules that do are `hooks/use-auth.ts`,
+      `lib/auth-api.ts` and `lib/form-errors.ts`, all lib/hook layer, no UI among them.
+      (An earlier version of this note said only `use-auth.ts` imported it. That was wrong: the
+      check behind it grepped the `@/lib/` alias only, so sibling modules importing
+      `./api-client` were invisible to it. The requirement holds either way — but "no UI file
+      imports it" is the property that was actually tested, and it is the one to claim.)
+      Every page and component goes through a hook · `/login` and `/signup` serve
       their real mockup copy, `/dashboard` is client-gated · `NEXT_PUBLIC_API_URL` is baked into
       the shipped chunk as `http://localhost:3001`, not a container hostname · **trap 2 is
       closed**: with `Origin: http://localhost:3000` the preflight is `204` with
