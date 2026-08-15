@@ -41,6 +41,40 @@ export const TASK_ROUTES = {
 } as const;
 
 /**
+ * The task service's own surface, reachable only from the gateway across the
+ * `internal: true` network.
+ *
+ * Every path carries the tenant key, which is the one thing that makes these
+ * different from the public {@link TASK_ROUTES} above. A client says
+ * `GET /tasks/:id` and the gateway, having verified a JWT, asks
+ * `GET /users/:userId/tasks/:id`. Two things follow, and both are the reason:
+ *
+ * 1. A route that cannot be *constructed* without the tenant key cannot be
+ *    *called* without it. Passing the id in a header or a body leaves scoping
+ *    as something each call site remembers; putting it in the path makes
+ *    forgetting it a type error at the builder and a 404 at the router.
+ * 2. Tenancy lands in every access log line, so "which user did this touch" is
+ *    answerable from the log alone, without correlating it against a token
+ *    nobody kept.
+ *
+ * `AUTH_INTERNAL_ROUTES` already sets the precedent that the internal and
+ * public shapes are separate objects even where the paths coincide; this is the
+ * same idea with a stronger reason, because here the paths deliberately differ.
+ *
+ * `base` is the Express pattern the service's controller mounts on, not a URL —
+ * it is the only member here that is not built from a value.
+ */
+export const TASK_INTERNAL_ROUTES = {
+  base: 'users/:userId/tasks',
+  forUser: (userId: string) => `/users/${encodeId(userId)}/tasks`,
+  byId: (userId: string, id: string) => `/users/${encodeId(userId)}/tasks/${encodeId(id)}`,
+  complete: (userId: string, id: string) =>
+    `/users/${encodeId(userId)}/tasks/${encodeId(id)}/complete`,
+  uncomplete: (userId: string, id: string) =>
+    `/users/${encodeId(userId)}/tasks/${encodeId(id)}/uncomplete`,
+} as const;
+
+/**
  * Escapes an id before it becomes part of a URL path.
  *
  * Every builder above takes a value that reached us from outside — a path
