@@ -3,13 +3,58 @@ import { AuthRepository } from './auth.repository';
 import { PrismaService } from '../prisma/prisma.service';
 
 describe('AuthRepository', () => {
-  const prisma = {
+  const delegates = {
     user: { create: jest.fn() },
-    refreshToken: { updateMany: jest.fn() },
+    refreshToken: { updateMany: jest.fn(), create: jest.fn(), update: jest.fn() },
+  };
+  const prisma = {
+    ...delegates,
+    // Runs the callback against the same delegates, which is enough to assert
+    // *what* the transaction does. That it is one transaction is asserted by
+    // the callback being handed to `$transaction` at all — the guarantee itself
+    // is the database's, and it is exercised for real by the concurrent-refresh
+    // check in the stage verification.
+    $transaction: jest.fn((work: (tx: typeof delegates) => unknown) => work(delegates)),
   };
   const repository = new AuthRepository(prisma as unknown as PrismaService);
 
   beforeEach(() => jest.clearAllMocks());
+
+  describe('rotateRefreshToken', () => {
+    const input = {
+      tokenId: 'old-row',
+      tokenHash: 'old-hash',
+      now: new Date('2026-08-14T12:00:00.000Z'),
+      successor: { userId: 'user-1', tokenHash: 'new-hash', expiresAt: new Date() },
+    };
+
+    it('revokes, inserts and links inside one transaction', async () => {
+      prisma.refreshToken.updateMany.mockResolvedValue({ count: 1 });
+      prisma.refreshToken.create.mockResolvedValue({ id: 'new-row' });
+
+      await expect(repository.rotateRefreshToken(input)).resolves.toBe(true);
+
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(prisma.refreshToken.create).toHaveBeenCalledWith({ data: input.successor });
+      expect(prisma.refreshToken.update).toHaveBeenCalledWith({
+        where: { id: 'old-row' },
+        data: { replacedById: 'new-row' },
+      });
+    });
+
+    it('writes nothing when the compare-and-swap is lost', async () => {
+      // The failure this exists to prevent: the old token dying without a
+      // replacement being issued. Zero rows updated means the caller lost, and
+      // nothing else may happen — least of all a successor row for a session
+      // the caller is about to be told it does not have.
+      prisma.refreshToken.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(repository.rotateRefreshToken(input)).resolves.toBe(false);
+
+      expect(prisma.refreshToken.create).not.toHaveBeenCalled();
+      expect(prisma.refreshToken.update).not.toHaveBeenCalled();
+    });
+  });
 
   describe('revokeIfActive', () => {
     it('narrows on liveness so the database, not the caller, arbitrates', async () => {

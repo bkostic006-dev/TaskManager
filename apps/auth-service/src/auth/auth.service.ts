@@ -8,7 +8,7 @@ import {
   PASSWORD_MIN_LENGTH,
 } from '@tally/contracts';
 import { AuthRepository } from './auth.repository';
-import { TokenService } from './token.service';
+import { MintedRefreshToken, TokenService } from './token.service';
 import type { User } from '../../generated/prisma';
 
 /** argon2id: the variant hardened against both GPU cracking and side channels. */
@@ -72,7 +72,7 @@ export class AuthService {
     const passwordHash = await argon2.hash(input.password, HASH_OPTIONS);
     const user = await this.repository.createUser({ email, name, passwordHash });
 
-    return (await this.issueSession(user)).session;
+    return this.issueSession(user);
   }
 
   /**
@@ -97,7 +97,7 @@ export class AuthService {
       throw new DomainError(ErrorCode.Unauthorized, CREDENTIALS_REJECTED);
     }
 
-    return (await this.issueSession(user)).session;
+    return this.issueSession(user);
   }
 
   /**
@@ -109,9 +109,15 @@ export class AuthService {
    * the thief moved first, which is what makes the theft visible.
    *
    * The revoke is a compare-and-swap, so two callers holding the same token
-   * cannot both succeed; see {@link AuthRepository.revokeIfActive}. The loser
-   * is rejected exactly like a replay, because at this layer they are
+   * cannot both succeed; see {@link AuthRepository.rotateRefreshToken}. The
+   * loser is rejected exactly like a replay, because at this layer they are
    * indistinguishable.
+   *
+   * Everything that can fail happens *before* the write: the user is loaded and
+   * the replacement token is minted first, so the only step left after the old
+   * token dies is returning it. The revoke and the insert are one transaction
+   * for the same reason — a user must never be left holding a credential the
+   * database has already burned.
    *
    * A dead token revokes only itself. Killing the whole chain on reuse is the
    * correct response to a confirmed theft, but it also logs out an honest user
@@ -130,20 +136,28 @@ export class AuthService {
       throw new DomainError(ErrorCode.Unauthorized, SESSION_REJECTED);
     }
 
-    if (!(await this.repository.revokeIfActive(tokenHash, now))) {
-      throw new DomainError(ErrorCode.Unauthorized, SESSION_REJECTED);
-    }
-
-    // Only reachable by the caller that won the swap, so this cannot double-issue.
     const user = await this.repository.findUserById(record.userId);
     if (!user) {
       throw new DomainError(ErrorCode.Unauthorized, SESSION_REJECTED);
     }
 
-    const { session, refreshTokenId } = await this.issueSession(user);
-    await this.repository.linkSuccessor(record.id, refreshTokenId);
+    const minted = this.tokens.mintRefreshToken();
+    const rotated = await this.repository.rotateRefreshToken({
+      tokenId: record.id,
+      tokenHash,
+      now,
+      successor: {
+        userId: record.userId,
+        tokenHash: minted.tokenHash,
+        expiresAt: minted.expiresAt,
+      },
+    });
 
-    return session;
+    if (!rotated) {
+      throw new DomainError(ErrorCode.Unauthorized, SESSION_REJECTED);
+    }
+
+    return this.buildSession(user, minted);
   }
 
   /**
@@ -174,31 +188,33 @@ export class AuthService {
   /**
    * Mints an access/refresh pair and persists the refresh side.
    *
-   * The new row's id comes back beside the session rather than inside it, so
-   * {@link refresh} can link the chain without a second lookup and without the
-   * id ever reaching a response body.
+   * The first session of a chain only — {@link refresh} does its own write,
+   * because rotation has to revoke and insert in one transaction and this does
+   * not.
    */
-  private async issueSession(
-    user: User,
-  ): Promise<{ session: AuthSession; refreshTokenId: string }> {
+  private async issueSession(user: User): Promise<AuthSession> {
     const minted = this.tokens.mintRefreshToken();
-    const [accessToken, stored] = await Promise.all([
-      this.tokens.signAccessToken(user),
-      this.repository.createRefreshToken({
-        userId: user.id,
-        tokenHash: minted.tokenHash,
-        expiresAt: minted.expiresAt,
-      }),
-    ]);
+    await this.repository.createRefreshToken({
+      userId: user.id,
+      tokenHash: minted.tokenHash,
+      expiresAt: minted.expiresAt,
+    });
 
+    return this.buildSession(user, minted);
+  }
+
+  /**
+   * Assembles the reply once the refresh token's row is committed.
+   *
+   * Signing happens here rather than beside the insert so that nothing which
+   * can throw is left after a write that has already destroyed a credential.
+   */
+  private async buildSession(user: User, minted: MintedRefreshToken): Promise<AuthSession> {
     return {
-      session: {
-        accessToken,
-        user: toAuthUser(user),
-        refreshToken: minted.token,
-        refreshExpiresAt: minted.expiresAt.toISOString(),
-      },
-      refreshTokenId: stored.id,
+      accessToken: await this.tokens.signAccessToken(user),
+      user: toAuthUser(user),
+      refreshToken: minted.token,
+      refreshExpiresAt: minted.expiresAt.toISOString(),
     };
   }
 

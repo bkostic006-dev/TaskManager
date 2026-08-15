@@ -55,7 +55,7 @@ describe('AuthService', () => {
       createRefreshToken: jest.fn().mockResolvedValue({ id: 'token-row-2' }),
       findRefreshToken: jest.fn(),
       revokeIfActive: jest.fn(),
-      linkSuccessor: jest.fn(),
+      rotateRefreshToken: jest.fn(),
     } as unknown as jest.Mocked<AuthRepository>;
 
     tokens = new TokenService(new JwtService({ secret: 'test-only-signing-key' }));
@@ -69,41 +69,49 @@ describe('AuthService', () => {
       const presentedHash = tokens.hashRefreshToken(presented);
 
       repository.findRefreshToken.mockResolvedValue(tokenRowFixture(presentedHash));
-      repository.revokeIfActive.mockResolvedValue(true);
       repository.findUserById.mockResolvedValue(userFixture('unused'));
+      repository.rotateRefreshToken.mockResolvedValue(true);
 
       const session = await service.refresh(presented);
 
       expect(session.refreshToken).not.toBe(presented);
-      expect(repository.revokeIfActive).toHaveBeenCalledWith(presentedHash, expect.any(Date));
 
-      // The stored hash must be the new token's, or the client would hold a
-      // credential the database has never seen.
-      expect(repository.createRefreshToken).toHaveBeenCalledWith(
-        expect.objectContaining({ tokenHash: tokens.hashRefreshToken(session.refreshToken) }),
-      );
-      expect(repository.linkSuccessor).toHaveBeenCalledWith('token-row-1', 'token-row-2');
+      // The revoke, the insert and the link are one call because they are one
+      // transaction. The presented hash is what gets burned, and the hash
+      // stored for the successor must be the new token's — otherwise the client
+      // walks away holding a credential the database has never seen.
+      expect(repository.rotateRefreshToken).toHaveBeenCalledWith({
+        tokenId: 'token-row-1',
+        tokenHash: presentedHash,
+        now: expect.any(Date),
+        successor: expect.objectContaining({
+          userId: 'user-1',
+          tokenHash: tokens.hashRefreshToken(session.refreshToken),
+        }),
+      });
     });
 
     it('rejects a token that lost the compare-and-swap, without issuing anything', async () => {
       // What a replay of an already-rotated token looks like from here, and
       // equally what the loser of two simultaneous refreshes sees.
       repository.findRefreshToken.mockResolvedValue(tokenRowFixture('some-hash'));
-      repository.revokeIfActive.mockResolvedValue(false);
+      repository.findUserById.mockResolvedValue(userFixture('unused'));
+      repository.rotateRefreshToken.mockResolvedValue(false);
 
       await expect(service.refresh('a-dead-token')).rejects.toMatchObject({
         code: ErrorCode.Unauthorized,
       });
 
-      // The point of the swap: the loser must not mint a session anyway.
+      // The loser minted a token in memory but must never have committed one:
+      // the swap failing means the transaction wrote nothing at all.
       expect(repository.createRefreshToken).not.toHaveBeenCalled();
     });
 
-    it('rejects an unknown token before attempting to revoke it', async () => {
+    it('rejects an unknown token before attempting to rotate it', async () => {
       repository.findRefreshToken.mockResolvedValue(null);
 
       await expect(service.refresh('never-issued')).rejects.toBeInstanceOf(DomainError);
-      expect(repository.revokeIfActive).not.toHaveBeenCalled();
+      expect(repository.rotateRefreshToken).not.toHaveBeenCalled();
     });
   });
 

@@ -93,17 +93,61 @@ export class AuthRepository {
   }
 
   /**
-   * Records which token replaced a rotated one.
+   * Rotation, as one database transaction: revoke the presented token, insert
+   * its replacement, and record the link between them.
    *
-   * Not load-bearing today — nothing reads the chain yet. It exists because
-   * reuse-detection (revoking a whole lineage when a dead token reappears) is
-   * a listed future improvement, and reconstructing the links after the fact is
-   * impossible; the rows are hashes with no other relation to each other.
+   * The three statements are here rather than sequenced by the service because
+   * atomicity is the whole point and it cannot be expressed from a layer that
+   * does not know Prisma exists. Run separately, a failure after the revoke —
+   * a dropped connection, a restart, or simply the gateway abandoning the call
+   * at its three-second timeout while this side keeps going — destroys the
+   * user's only credential without ever delivering the replacement. They are
+   * logged out by a `500` they cannot retry, because the token the retry would
+   * present is already dead. Inside a transaction that failure rolls back to a
+   * session the client still holds.
+   *
+   * The compare-and-swap is unchanged and still the verdict: `updateMany`
+   * narrowed on `revokedAt: null` behaves identically inside a transaction —
+   * the second caller blocks on the row lock, then re-evaluates the predicate
+   * after the winner commits and matches nothing. See {@link revokeIfActive}
+   * for why the rowcount, and not a preceding read, is what decides.
+   *
+   * The successor is inserted with the caller's already-minted hash, so the
+   * plaintext token never reaches this layer.
+   *
+   * @returns `true` for the caller that won the swap and now holds a committed
+   * new session; `false` if the token was already rotated, expired, or unknown,
+   * in which case nothing was written.
    */
-  async linkSuccessor(tokenId: string, successorId: string): Promise<void> {
-    await this.prisma.refreshToken.update({
-      where: { id: tokenId },
-      data: { replacedById: successorId },
+  rotateRefreshToken(input: {
+    tokenId: string;
+    tokenHash: string;
+    now: Date;
+    successor: { userId: string; tokenHash: string; expiresAt: Date };
+  }): Promise<boolean> {
+    return this.prisma.$transaction(async (tx) => {
+      const { count } = await tx.refreshToken.updateMany({
+        where: { tokenHash: input.tokenHash, revokedAt: null, expiresAt: { gt: input.now } },
+        data: { revokedAt: input.now },
+      });
+
+      if (count !== 1) {
+        return false;
+      }
+
+      const successor = await tx.refreshToken.create({ data: input.successor });
+
+      // Not load-bearing today — nothing reads the chain yet. It is written
+      // because reuse-detection (revoking a whole lineage when a dead token
+      // reappears) is a listed future improvement, and reconstructing the links
+      // afterwards is impossible; the rows are hashes with no other relation to
+      // each other.
+      await tx.refreshToken.update({
+        where: { id: input.tokenId },
+        data: { replacedById: successor.id },
+      });
+
+      return true;
     });
   }
 }
