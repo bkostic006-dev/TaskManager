@@ -151,8 +151,10 @@ Each stage ends in something runnable and gets reviewed before the next begins.
       boot and is documented as a limitation, replacing a comment that claimed a protection
       which did not exist.
       _Correctness:_ `/auth/me` answers `401` rather than `404` for a deleted account, so a
-      client clears its session instead of looping · malformed JSON is `400 VALIDATION`, not
-      `400 INTERNAL` · the auth service validates `refreshToken` before dereferencing it
+      client clears its session instead of looping · **syntactically** malformed JSON is
+      `400 VALIDATION`, not `400 INTERNAL` (narrower than this line first claimed — two other
+      malformed-body classes still returned `500` until stage 3.6) · the auth service validates
+      `refreshToken` before dereferencing it
       (an empty `POST` was a `TypeError` → `500`) · ids are `encodeURIComponent`-escaped into
       internal URLs, and a non-uuid `sub` is rejected before it reaches a `@db.Uuid` column ·
       `WEB_ORIGIN` is required rather than defaulted, and the refresh cookie's `Secure` now
@@ -184,8 +186,48 @@ Each stage ends in something runnable and gets reviewed before the next begins.
       config — `COOKIE_SECURE=maybe` exits 1 with `COOKIE_SECURE must be "true" or "false"`, and
       an unset `WEB_ORIGIN` exits 1 with `Configuration key "WEB_ORIGIN" does not exist`.
       No `ERROR` or unhandled exception in any service log across the whole run.
+- [x] **3.6 · Second fix pass** — the stage-3.5 fix pass was itself the product of an adversarial
+      review, so it had never been attacked. A hostile reviewer was briefed against the running
+      stack to break it rather than confirm it. — `cee60fd` … `e72c447`
+      **What held**, which is the more useful half: `alg:none` (with and without a junk
+      signature), an empty signature, a wrong-key signature, and `kid`/`jku` header injection are
+      all `401` — the HS256 pinning is real, and no key is ever fetched. Rotation is
+      **understated** in the notes above, not overstated: one `200` out of **twenty** parallel
+      refreshes, not eight, and `expiresAt` is genuinely enforced rather than only `revokedAt`.
+      Path traversal through `sub`, prototype-pollution keys, the CORS origin matcher, the
+      content-type matrix on login, and the timing-oracle equaliser all held. Nothing leaked a
+      stack, a Prisma error, or an internal hostname to any client.
+      **Four defects fixed:** an oversized body was `500` where `413` is honest, and an
+      over-nested one `500` where Nest's own recursive `stripProtoKeys` overflowed the stack ·
+      the verifier pinned algorithm, issuer and audience but never expiry, so a token whose `exp`
+      was deleted or set a century out was accepted · the guard read `claims.sub` untyped, so a
+      forged `sub: ["<uuid>"]` became the caller's identity — contained today, and load-bearing
+      for stage 4, where `userId` reaches a query builder · `/auth/refresh` and `/auth/logout`
+      take their credential from the cookie, so the login CSRF fix never covered them.
+      _Verified, each one re-run by the orchestrator rather than taken on report:_ 150KB body
+      `500`→`413`, and the depth branch stays reachable under the new 32kb limit (5 000-deep
+      objects and 15 000-deep arrays both `400`, while a 60KB payload is refused on size first) ·
+      forged tokens with no `exp`, no `iat`, or `exp` +100y against an hour-old `iat` are all
+      `200`→`401`, and `sub: ["<uuid>"]` is `200`→`401` · hostile-origin `refresh`/`logout`
+      `200`/`204`→`401` **with the session surviving both attempts**, while curl with no `Origin`
+      and the browser's correct `Origin` still succeed. `pnpm lint`, `pnpm -r typecheck`, **36
+      tests** green (31 before).
+      _A claim rejected rather than shipped:_ `requireExp` is the natural companion to `maxAge`
+      and **does not exist in `jsonwebtoken@9`** — passing it, an exp-less token still verifies.
+      Confirmed in the installed source. `exp` presence is asserted in the guard instead, so the
+      protection is real rather than decorative. This is the third time this project has caught a
+      comment claiming a protection that did not exist.
+      _Known and accepted:_ `maxAge` measures from `iat`, so a token with a far-future `exp` and a
+      **fresh** `iat` is spendable for its normal 15 minutes and then dead. The property now
+      guaranteed is "no access token is accepted more than `ACCESS_TOKEN_TTL` after it was
+      minted, whatever its `exp` says" — stated that way rather than as "`exp` is enforced",
+      which would be the overclaim. Requiring `exp == iat + TTL` would hardcode the policy a
+      second time and break every login if the signer's TTL drifted.
+      _Residual, documented not fixed:_ under a future `SameSite=None` deployment the origin
+      check is what stops forced-logout CSRF; a browser always sends `Origin` on a cross-site
+      POST, but this is defence for a configuration this repo does not ship.
 - [ ] **4 · Tasks end to end** — CRUD, completion, list query. Tests for the query builder and completion transitions.
-      **Two things this stage must build that are easy to miss, both found by the stage-3 audit:**
+      **Three things this stage must build that are easy to miss:**
       1. **task-service needs its own `DomainExceptionFilter`.** auth-service registers one via
          `APP_FILTER` in its `app.module.ts`; task-service has no equivalent. Without it a
          `DomainError` leaves as an unshaped `500`, the gateway's `UpstreamService` cannot read
@@ -196,6 +238,16 @@ Each stage ends in something runnable and gets reviewed before the next begins.
       2. **Numeric query fields need `@Type(() => Number)`.** The gateway's global pipe sets
          `transform: true` but not `enableImplicitConversion`, so `page=1` arrives as the
          string `'1'` and fails `@IsInt()` with a `400`. Applies to `page` and `pageSize`.
+      3. **`UpstreamService` has only `get` and `post`.** This stage needs `PATCH` and `DELETE`,
+         and there is no obvious home for them — so the tempting move is to reach for
+         `HttpService` at the call site, which silently escapes both guarantees the class exists
+         to hold (`timeout(3000)`, and retry on reads only). The new verbs belong in that file,
+         **non-retrying**: a repeated `DELETE` is idempotent but a repeated `PATCH` is not, and
+         the policy is decided there rather than per call site precisely so "just this once"
+         is not a one-line change.
+      Also: every task-service repository method takes `userId` as its **first argument**, so
+      tenancy scoping is enforced by the type system rather than by remembering. Stage 3.6's
+      guard fix guarantees that `userId` is a string before it ever reaches one.
       _Checkpoint:_ curl CRUD, pagination, filter, sort, and a `404` on another user's task.
 - [ ] **5 · Frontend auth** — Next + Mantine + Tally tokens, login/signup, session restore, single-flight refresh interceptor.
       **Owns the brief's "API interaction should be abstracted using reusable hooks or
