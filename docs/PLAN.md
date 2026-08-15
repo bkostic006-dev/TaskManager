@@ -145,7 +145,7 @@ Each stage ends in something runnable and gets reviewed before the next begins.
       **violated** against the brief; these were real bugs behind a passing checkpoint.
       _Security:_ login CSRF closed by refusing form-encoded bodies (`bodyParser: false` plus
       `express.json()`) — the urlencoded parser Nest registers by default made
-      `POST /auth/login` a CORS *simple* request, so a cross-origin form could log a victim into
+      `POST /auth/login` a CORS _simple_ request, so a cross-origin form could log a victim into
       the attacker's account · rotation's revoke/insert/link made one transaction, so a failure
       after the revoke can no longer strand a user with a burned token · JWT verification pinned
       to `HS256` with `issuer`/`audience`, ahead of the RS256 migration where an unpinned
@@ -255,24 +255,21 @@ Each stage ends in something runnable and gets reviewed before the next begins.
       `PATCH {"completed":true}` is `400`, so completion is unreachable as a field edit · all
       seven routes `401` without a token. `pnpm lint`, `pnpm -r typecheck`, **49 tests** green
       (36 before; 13 new).
-      **Three things this stage had to build that were easy to miss:**
-      1. **task-service needs its own `DomainExceptionFilter`.** auth-service registers one via
-         `APP_FILTER` in its `app.module.ts`; task-service has no equivalent. Without it a
-         `DomainError` leaves as an unshaped `500`, the gateway's `UpstreamService` cannot read
-         an `error` code it recognises back off the body, and every domain failure becomes
-         `503`. "Another user's task is `404`" would silently become `503` — which is precisely
-         what this stage's checkpoint tests, so it would fail in a way that looks like a
-         networking problem.
-      2. **Numeric query fields need `@Type(() => Number)`.** The gateway's global pipe sets
-         `transform: true` but not `enableImplicitConversion`, so `page=1` arrives as the
-         string `'1'` and fails `@IsInt()` with a `400`. Applies to `page` and `pageSize`.
-      3. **`UpstreamService` has only `get` and `post`.** This stage needs `PATCH` and `DELETE`,
-         and there is no obvious home for them — so the tempting move is to reach for
-         `HttpService` at the call site, which silently escapes both guarantees the class exists
-         to hold (`timeout(3000)`, and retry on reads only). The new verbs belong in that file,
-         **non-retrying**: a repeated `DELETE` is idempotent but a repeated `PATCH` is not, and
-         the policy is decided there rather than per call site precisely so "just this once"
-         is not a one-line change.
+      **Three things this stage had to build that were easy to miss:** 1. **task-service needs its own `DomainExceptionFilter`.** auth-service registers one via
+      `APP_FILTER` in its `app.module.ts`; task-service has no equivalent. Without it a
+      `DomainError` leaves as an unshaped `500`, the gateway's `UpstreamService` cannot read
+      an `error` code it recognises back off the body, and every domain failure becomes
+      `503`. "Another user's task is `404`" would silently become `503` — which is precisely
+      what this stage's checkpoint tests, so it would fail in a way that looks like a
+      networking problem. 2. **Numeric query fields need `@Type(() => Number)`.** The gateway's global pipe sets
+      `transform: true` but not `enableImplicitConversion`, so `page=1` arrives as the
+      string `'1'` and fails `@IsInt()` with a `400`. Applies to `page` and `pageSize`. 3. **`UpstreamService` has only `get` and `post`.** This stage needs `PATCH` and `DELETE`,
+      and there is no obvious home for them — so the tempting move is to reach for
+      `HttpService` at the call site, which silently escapes both guarantees the class exists
+      to hold (`timeout(3000)`, and retry on reads only). The new verbs belong in that file,
+      **non-retrying**: a repeated `DELETE` is idempotent but a repeated `PATCH` is not, and
+      the policy is decided there rather than per call site precisely so "just this once"
+      is not a one-line change.
       Also: every task-service repository method takes `userId` as its **first argument**, so
       tenancy scoping is enforced by the type system rather than by remembering. Stage 3.6's
       guard fix guarantees that `userId` is a string before it ever reaches one.
@@ -307,7 +304,7 @@ Each stage ends in something runnable and gets reviewed before the next begins.
       **The cache is a tenancy bug waiting to happen.** NestJS's `CacheInterceptor` keys on the
       request URL, and `GET /tasks?page=1` is byte-identical for every user — the identity lives
       in the `Authorization` header, which the default key never sees. Dropped in naively, the
-      first user to load page 1 fills the cache and the second is served *their rows*. The whole
+      first user to load page 1 fills the cache and the second is served _their rows_. The whole
       point of "every task query is scoped by the JWT's `userId`" is undone by a decorator added
       for a bonus mark. Either override `trackBy` to fold `request.user.userId` into the key, or
       cache inside the task service where the query already carries the user. **Needs a test that
@@ -315,6 +312,14 @@ Each stage ends in something runnable and gets reviewed before the next begins.
       log line proves the cache works, not that it is safe.
       _Checkpoint:_ `429` on rapid auth; cache hit visible in logs; the two-user cache test green.
 - [ ] **8 · Ship** — README, fresh-clone test on a clean machine, invite reviewers.
+      **Do not send-and-assume.** The repo is private, so access depends on an invitation
+      being accepted. `MFarrugiaCatena` is verified to exist and is Matthew Farrugia. Ricardo
+      is given only as an email — GitHub can invite by address, but silently does nothing if
+      it is not attached to an account, and that failure is invisible from our side.
+      After inviting, confirm **two** pending invitations:
+      `gh api repos/bkostic006-dev/TaskManager/invitations --jq '.[].invitee.login'`
+      If one is missing, ask the recruiter for the GitHub username the same day. Making the
+      repo public is the zero-risk fallback and the brief explicitly permits it.
       **Invite the reviewers early — do not leave it to this stage.** It is the one step where
       "works locally" and "submitted" diverge, and the only requirement with no fallback if
       something goes wrong at the end. An invitation costs nothing to send now and nothing to
@@ -328,35 +333,35 @@ Every requirement in `BRIEF.md` and the stage that owns it. This is a map, not a
 board — status comes from the checkboxes above and from `git log`. Its job is to make an
 orphaned requirement obvious. Re-audited with fresh eyes at stages 4 and 8.
 
-| Brief requirement                                            | Owner   |
-| ------------------------------------------------------------ | ------- |
-| React · TypeScript · Next.js · CSS framework                 | 1 ✓     |
-| Node.js with NestJS                                          | 1 ✓     |
-| Microservice split: gateway, auth service, task service      | 1 ✓     |
-| Docker + docker-compose for local orchestration              | 1 ✓     |
-| PostgreSQL                                                   | 1 ✓ / 2 |
-| Prisma or TypeORM                                            | 2 ✓     |
-| Services communicate over a transport layer                  | 3 ✓     |
-| Sign up and log in via the API Gateway                       | 3 ✓     |
-| JWTs with access + refresh tokens                            | 3 ✓     |
-| **Refresh token rotation** (the brief's only "must")         | 3 ✓     |
-| Gateway: global validation, request logging, guards, filters | 3 ✓     |
+| Brief requirement                                            | Owner     |
+| ------------------------------------------------------------ | --------- |
+| React · TypeScript · Next.js · CSS framework                 | 1 ✓       |
+| Node.js with NestJS                                          | 1 ✓       |
+| Microservice split: gateway, auth service, task service      | 1 ✓       |
+| Docker + docker-compose for local orchestration              | 1 ✓       |
+| PostgreSQL                                                   | 1 ✓ / 2   |
+| Prisma or TypeORM                                            | 2 ✓       |
+| Services communicate over a transport layer                  | 3 ✓       |
+| Sign up and log in via the API Gateway                       | 3 ✓       |
+| JWTs with access + refresh tokens                            | 3 ✓       |
+| **Refresh token rotation** (the brief's only "must")         | 3 ✓       |
+| Gateway: global validation, request logging, guards, filters | 3 ✓       |
 | DTOs and validators                                          | 3 ✓ · 4 ✓ |
 | Consistent HTTP status codes · global exception handling     | 3 ✓ · 4 ✓ |
-| Auth service encapsulates all user logic                     | 3 ✓     |
-| Task CRUD + mark complete; completion business logic         | 4 ✓     |
-| Pagination with page size and page selector                  | 4 ✓ · 6 |
-| Filtering by completion status and keyword                   | 4 ✓ · 6 |
-| Sorting by date and completion status                        | 4 ✓ · 6 |
+| Auth service encapsulates all user logic                     | 3 ✓       |
+| Task CRUD + mark complete; completion business logic         | 4 ✓       |
+| Pagination with page size and page selector                  | 4 ✓ · 6   |
+| Filtering by completion status and keyword                   | 4 ✓ · 6   |
+| Sorting by date and completion status                        | 4 ✓ · 6   |
 | Task service reachable only via the gateway, authenticated   | 1 ✓ · 4 ✓ |
-| API abstracted behind reusable hooks or service functions    | 5       |
-| Fully responsive · loading indicators · toasts               | 6       |
+| API abstracted behind reusable hooks or service functions    | 5         |
+| Fully responsive · loading indicators · toasts               | 6         |
 | Clean architecture across services                           | 3 ✓ · 4 ✓ |
-| Bonus: rate limiting and caching                             | 7       |
-| Bonus: RxJS for service comms / retry                        | 3 · 7   |
-| README: run locally · trade-offs · limitations               | 1 ✓ · 8 |
-| GitHub repo + access for both reviewers                      | 8       |
-| Clear and meaningful commit history                          | ongoing |
+| Bonus: rate limiting and caching                             | 7         |
+| Bonus: RxJS for service comms / retry                        | 3 · 7     |
+| README: run locally · trade-offs · limitations               | 1 ✓ · 8   |
+| GitHub repo + access for both reviewers                      | 8         |
+| Clear and meaningful commit history                          | ongoing   |
 
 ## README (required sections)
 
