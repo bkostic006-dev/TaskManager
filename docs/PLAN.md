@@ -443,7 +443,7 @@ orphaned requirement obvious. Re-audited with fresh eyes at stages 4 and 8.
 | Filtering by completion status and keyword                   | 4 ✓ · 6   |
 | Sorting by date and completion status                        | 4 ✓ · 6   |
 | Task service reachable only via the gateway, authenticated   | 1 ✓ · 4 ✓ |
-| API abstracted behind reusable hooks or service functions    | 5         |
+| API abstracted behind reusable hooks or service functions    | 5 ✓       |
 | Fully responsive · loading indicators · toasts               | 6         |
 | Clean architecture across services                           | 3 ✓ · 4 ✓ |
 | Bonus: rate limiting and caching                             | 7         |
