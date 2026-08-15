@@ -11,14 +11,34 @@ import { ApiError, DomainError, ERROR_STATUS, ErrorCode } from '@tally/contracts
  * - `DomainError` — raised by the validation pipe, by the guard, or re-raised
  *   from a downstream service's reply. The code carries the meaning; the status
  *   comes from {@link ERROR_STATUS}, never from a literal at the throw site.
- * - `HttpException` — Nest's own, almost always a 404 for a route that does not
- *   exist. Given the same body so a client never has to parse two formats.
+ * - `HttpException` — Nest's own: a route that does not exist, or a body the
+ *   parser rejected before any handler saw it. Given the same body so a client
+ *   never has to parse two formats, and a code that agrees with its status —
+ *   see {@link NEST_STATUS_CODES}.
  * - Anything else — a bug. Logged with its stack and answered with a bare
  *   `500`, because the alternative is putting a stack trace on the internet.
  *
  * @throws Nothing. A filter that throws produces an unhandled rejection and a
  * hung socket, so every branch ends in a written response.
  */
+/**
+ * Domain codes for the statuses the framework raises on its own, before any
+ * handler runs.
+ *
+ * These exceptions come from Nest and Express rather than from our code, so
+ * they arrive with a status and no `ErrorCode`, and one has to be chosen for
+ * them. Defaulting all of them to `Internal` published a body that contradicted
+ * itself — a malformed JSON payload answered `400` with `"error":"INTERNAL"`,
+ * which tells a client both "you sent something wrong" and "the server broke".
+ * `400` here is Express's body parser rejecting the payload, which is a
+ * validation failure by any reading; `404` is an unmatched route. Anything else
+ * really is ours, and keeps `Internal`.
+ */
+const NEST_STATUS_CODES: Record<number, ErrorCode> = {
+  400: ErrorCode.Validation,
+  404: ErrorCode.NotFound,
+};
+
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
   private readonly logger = new Logger(AllExceptionsFilter.name);
@@ -46,7 +66,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       const statusCode = exception.getStatus();
       return {
         statusCode,
-        error: statusCode === 404 ? ErrorCode.NotFound : ErrorCode.Internal,
+        error: NEST_STATUS_CODES[statusCode] ?? ErrorCode.Internal,
         message: exception.message,
       };
     }
