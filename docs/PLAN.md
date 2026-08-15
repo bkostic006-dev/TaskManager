@@ -226,8 +226,38 @@ Each stage ends in something runnable and gets reviewed before the next begins.
       _Residual, documented not fixed:_ under a future `SameSite=None` deployment the origin
       check is what stops forced-logout CSRF; a browser always sends `Origin` on a cross-site
       POST, but this is defence for a configuration this repo does not ship.
-- [ ] **4 · Tasks end to end** — CRUD, completion, list query. Tests for the query builder and completion transitions.
-      **Three things this stage must build that are easy to miss:**
+- [x] **4 · Tasks end to end** — CRUD, completion, list query. Tests for the query builder and
+      completion transitions. — `1603465` … `3e68047`
+      _Decision made here:_ the internal hop carries `userId` **in the path**
+      (`/users/:userId/tasks`), because a route that cannot be constructed without the tenant key
+      cannot be called without it. Every task-service repository method takes `userId` as its
+      first argument with no overload omitting it, so a query that forgets the tenant key does
+      not compile — the tenancy rule is kept by the type system, not by remembering. Writes are
+      `updateMany`/`deleteMany` narrowed on `{ id, userId }` rather than `update`/`delete` on the
+      primary key: a unique-key write cannot express the scope, so it would need a preceding
+      read, and between that read and the write the row's owner is taken on trust.
+      _Verified against the running stack, re-run by the orchestrator rather than taken on
+      report:_ CRUD round trip `201`/`200`/`200`/`204` then `404` · **all five routes answer
+      `404` for another user's task — not `403`, and no `503` anywhere**, which is what proves
+      the new filter is actually wired; the owner's copy was untouched afterwards, the row never
+      appeared in the other user's list, and no response exposes `userId` · `pageSize=7`,
+      `page=0`, `page=abc`, `status=maybe`, `sortBy=dueDate`, `sortOrder=sideways` all `400`
+      with the field named, while `pageSize=8` and `48` are `200` · filter totals 47 / 16 / 31
+      with every row in each page matching the filter · walking all six pages of
+      `sortBy=completed` (16 rows tied on the sort column) yields 47 distinct ids matching a
+      single 48-row fetch, so the `id` tie-break really does make pagination stable across a
+      page boundary · `search` matches a term that appears **only in a description**, and is
+      case-insensitive · re-completing three times leaves `completedAt` **and `updatedAt`
+      unchanged** — the stronger signal, since it shows the no-op path issues no write at all —
+      while a genuine transition after `uncomplete` does stamp a new time ·
+      `PATCH {"completed":true}` is `400`, so completion is unreachable as a field edit · all
+      seven routes `401` without a token. `pnpm lint`, `pnpm -r typecheck`, **49 tests** green
+      (36 before; 13 new).
+      _Noted, not fixed:_ an absent required field returns several validation messages at once
+      (`stopAtFirstError` is not set on the shared pipe). It is the stage-3 pattern, visible on
+      `/auth/signup` too, and the fix belongs to the adversarially-reviewed auth pipeline rather
+      than to this stage.
+      **Three things this stage had to build that were easy to miss:**
       1. **task-service needs its own `DomainExceptionFilter`.** auth-service registers one via
          `APP_FILTER` in its `app.module.ts`; task-service has no equivalent. Without it a
          `DomainError` leaves as an unshaped `500`, the gateway's `UpstreamService` cannot read
@@ -285,23 +315,23 @@ orphaned requirement obvious. Re-audited with fresh eyes at stages 4 and 8.
 | Microservice split: gateway, auth service, task service      | 1 ✓     |
 | Docker + docker-compose for local orchestration              | 1 ✓     |
 | PostgreSQL                                                   | 1 ✓ / 2 |
-| Prisma or TypeORM                                            | 2       |
-| Services communicate over a transport layer                  | 3       |
-| Sign up and log in via the API Gateway                       | 3       |
-| JWTs with access + refresh tokens                            | 3       |
-| **Refresh token rotation** (the brief's only "must")         | 3       |
-| Gateway: global validation, request logging, guards, filters | 3       |
-| DTOs and validators                                          | 3       |
-| Consistent HTTP status codes · global exception handling     | 3       |
-| Auth service encapsulates all user logic                     | 3       |
-| Task CRUD + mark complete; completion business logic         | 4       |
-| Pagination with page size and page selector                  | 4 · 6   |
-| Filtering by completion status and keyword                   | 4 · 6   |
-| Sorting by date and completion status                        | 4 · 6   |
-| Task service reachable only via the gateway, authenticated   | 1 ✓ · 4 |
+| Prisma or TypeORM                                            | 2 ✓     |
+| Services communicate over a transport layer                  | 3 ✓     |
+| Sign up and log in via the API Gateway                       | 3 ✓     |
+| JWTs with access + refresh tokens                            | 3 ✓     |
+| **Refresh token rotation** (the brief's only "must")         | 3 ✓     |
+| Gateway: global validation, request logging, guards, filters | 3 ✓     |
+| DTOs and validators                                          | 3 ✓ · 4 ✓ |
+| Consistent HTTP status codes · global exception handling     | 3 ✓ · 4 ✓ |
+| Auth service encapsulates all user logic                     | 3 ✓     |
+| Task CRUD + mark complete; completion business logic         | 4 ✓     |
+| Pagination with page size and page selector                  | 4 ✓ · 6 |
+| Filtering by completion status and keyword                   | 4 ✓ · 6 |
+| Sorting by date and completion status                        | 4 ✓ · 6 |
+| Task service reachable only via the gateway, authenticated   | 1 ✓ · 4 ✓ |
 | API abstracted behind reusable hooks or service functions    | 5       |
 | Fully responsive · loading indicators · toasts               | 6       |
-| Clean architecture across services                           | 3 · 4   |
+| Clean architecture across services                           | 3 ✓ · 4 ✓ |
 | Bonus: rate limiting and caching                             | 7       |
 | Bonus: RxJS for service comms / retry                        | 3 · 7   |
 | README: run locally · trade-offs · limitations               | 1 ✓ · 8 |
