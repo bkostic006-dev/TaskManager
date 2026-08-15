@@ -5,7 +5,14 @@ import { HttpModule } from '@nestjs/axios';
 import { JwtModule } from '@nestjs/jwt';
 import cookieParser from 'cookie-parser';
 import type { ValidationError } from 'class-validator';
-import { DomainError, ErrorCode, UPSTREAM_TIMEOUT_MS } from '@tally/contracts';
+import {
+  DomainError,
+  ErrorCode,
+  JWT_ALGORITHM,
+  JWT_AUDIENCE,
+  JWT_ISSUER,
+  UPSTREAM_TIMEOUT_MS,
+} from '@tally/contracts';
 import { AllExceptionsFilter } from './all-exceptions.filter';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { LoggingInterceptor } from './logging.interceptor';
@@ -37,8 +44,20 @@ import { UpstreamService } from './upstream.service';
       // Verification key. Same value the auth service signs with — see the
       // JWT_SECRET note in docker-compose.yml — and `getOrThrow` so a missing
       // one is a boot failure rather than a 401 on the first protected request.
+      //
+      // `verifyOptions` is the verifier's half of the contract in
+      // `@tally/contracts`, and it mirrors the auth service's `signOptions`
+      // exactly. Naming the algorithm list matters most: without it the token's
+      // own header decides how it is checked, which is the shape of every
+      // algorithm-confusion bug — and the plan puts RS256 on the roadmap, which
+      // is precisely where it would bite.
       useFactory: (config: ConfigService) => ({
         secret: config.getOrThrow<string>('JWT_SECRET'),
+        verifyOptions: {
+          algorithms: [JWT_ALGORITHM],
+          issuer: JWT_ISSUER,
+          audience: JWT_AUDIENCE,
+        },
       }),
     }),
   ],

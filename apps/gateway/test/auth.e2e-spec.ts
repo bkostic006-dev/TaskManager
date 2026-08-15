@@ -1,8 +1,17 @@
 import { INestApplication } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
+import express from 'express';
 import request from 'supertest';
-import { AUTH_ROUTES, AuthSession, DomainError, ErrorCode, REFRESH_COOKIE } from '@tally/contracts';
+import {
+  AUTH_ROUTES,
+  AuthSession,
+  DomainError,
+  ErrorCode,
+  JWT_AUDIENCE,
+  JWT_ISSUER,
+  REFRESH_COOKIE,
+} from '@tally/contracts';
 import { AppModule } from '../src/app.module';
 import { AuthClient } from '../src/auth/auth.client';
 
@@ -42,10 +51,21 @@ describe('Gateway auth', () => {
       .useValue(authClient)
       .compile();
 
-    app = moduleRef.createNestApplication();
+    // Mirrors `main.ts`, and has to be restated because the body parser is an
+    // adapter option rather than a module provider — the same reason CORS is
+    // configured there. Without it the suite would run against a gateway that
+    // still accepts form encoding, and the test below asserting it does not
+    // would pass for the wrong reason.
+    app = moduleRef.createNestApplication({ bodyParser: false });
+    app.use(express.json());
     await app.init();
 
-    accessToken = await app.get(JwtService).signAsync({ sub: 'user-1', email: SESSION.user.email });
+    accessToken = await app
+      .get(JwtService)
+      .signAsync(
+        { sub: 'user-1', email: SESSION.user.email },
+        { issuer: JWT_ISSUER, audience: JWT_AUDIENCE },
+      );
   });
 
   afterAll(async () => {
@@ -143,15 +163,70 @@ describe('Gateway auth', () => {
   });
 
   it('rejects a token signed with another key', async () => {
-    const forged = await new JwtService({ secret: 'not-the-gateways-key' }).signAsync({
-      sub: 'user-2',
-      email: 'mallory@northbay.dev',
-    });
+    const forged = await new JwtService({ secret: 'not-the-gateways-key' }).signAsync(
+      { sub: 'user-2', email: 'mallory@northbay.dev' },
+      { issuer: JWT_ISSUER, audience: JWT_AUDIENCE },
+    );
 
     await request(app.getHttpServer())
       .get(AUTH_ROUTES.me)
       .set('Authorization', `Bearer ${forged}`)
       .expect(401);
+  });
+
+  it('rejects a correctly signed token minted for a different issuer and audience', async () => {
+    // The key alone is not the whole contract. A token signed with our secret
+    // by something else in an estate — another service, an older deployment —
+    // is still not a token for this gateway, and the pinned `issuer`/`audience`
+    // are what say so.
+    const foreign = await app
+      .get(JwtService)
+      .signAsync(
+        { sub: 'user-2', email: 'mallory@northbay.dev' },
+        { issuer: 'somewhere-else', audience: 'something-else' },
+      );
+
+    await request(app.getHttpServer())
+      .get(AUTH_ROUTES.me)
+      .set('Authorization', `Bearer ${foreign}`)
+      .expect(401);
+  });
+
+  it('answers 401, not 404, when a valid token names an account that is gone', async () => {
+    // The auth service is right to call this a 404 — it looked up an id and
+    // found nothing. The client cannot act on that: a 404 leaves the session in
+    // place, so a frontend that calls /auth/me on load retries forever with a
+    // credential that will never work. 401 is the one status it already knows
+    // means "clear the session".
+    authClient.findUser.mockRejectedValue(
+      new DomainError(ErrorCode.NotFound, 'That account no longer exists.'),
+    );
+
+    const res = await request(app.getHttpServer())
+      .get(AUTH_ROUTES.me)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(401);
+
+    expect(res.body.error).toBe(ErrorCode.Unauthorized);
+  });
+
+  it('refuses a form-encoded login, closing the no-preflight CSRF path', async () => {
+    // A cross-origin `<form method="POST">` sending this content type is a CORS
+    // *simple* request: no preflight, so the browser sends it and the gateway
+    // would answer with `Set-Cookie` — logging the victim into the attacker's
+    // account, where everything they then write is readable by its owner. CORS
+    // hides only the response, which the attacker does not need. Accepting JSON
+    // and nothing else means such a request cannot be made without a preflight,
+    // and a preflight is something `enableCors` can refuse.
+    const res = await request(app.getHttpServer())
+      .post(AUTH_ROUTES.login)
+      .type('form')
+      .send({ email: 'mallory@northbay.dev', password: 'the-attackers-password' })
+      .expect(400);
+
+    expect(res.body.error).toBe(ErrorCode.Validation);
+    expect(res.headers['set-cookie']).toBeUndefined();
+    expect(authClient.login).not.toHaveBeenCalled();
   });
 
   it('refuses to refresh without a cookie, before troubling the auth service', async () => {
