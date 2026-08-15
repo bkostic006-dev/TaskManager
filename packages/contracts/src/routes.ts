@@ -30,15 +30,30 @@ export const AUTH_INTERNAL_ROUTES = {
   login: '/auth/login',
   refresh: '/auth/refresh',
   logout: '/auth/logout',
-  userById: (id: string) => `/auth/users/${id}`,
+  userById: (id: string) => `/auth/users/${encodeId(id)}`,
 } as const;
 
 export const TASK_ROUTES = {
   base: '/tasks',
-  byId: (id: string) => `/tasks/${id}`,
-  complete: (id: string) => `/tasks/${id}/complete`,
-  uncomplete: (id: string) => `/tasks/${id}/uncomplete`,
+  byId: (id: string) => `/tasks/${encodeId(id)}`,
+  complete: (id: string) => `/tasks/${encodeId(id)}/complete`,
+  uncomplete: (id: string) => `/tasks/${encodeId(id)}/uncomplete`,
 } as const;
+
+/**
+ * Escapes an id before it becomes part of a URL path.
+ *
+ * Every builder above takes a value that reached us from outside — a path
+ * parameter, or the `sub` of a token — and splices it into a URL the gateway
+ * then requests over the internal network. Raw, a `/` or a `?` in that value
+ * would change which route the service sees rather than which record it looks
+ * up, which is path traversal against our own services. These ids are uuids in
+ * every path the code takes today, so this encodes nothing in practice; it is
+ * here so that staying true is not a precondition for the URL being correct.
+ */
+function encodeId(id: string): string {
+  return encodeURIComponent(id);
+}
 
 /** Every service exposes this for compose healthchecks and nothing else. */
 export const HEALTH_ROUTE = '/health';
