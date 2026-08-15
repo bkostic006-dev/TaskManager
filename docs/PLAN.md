@@ -20,6 +20,34 @@ Reviewers to invite at the end: `MFarrugiaCatena` (matthew.farrugia@catenamedia.
 | Validation | class-validator + global `ValidationPipe` (`whitelist`, `forbidNonWhitelisted`, `transform`)              | Explicit brief requirement                                                                                                                            |
 | Tests      | After each stage, on logic that branches. ~25 total                                                       | The brief never mentions testing; a proportionate suite is a professional-standards signal, not a discipline framework                                |
 
+### Versioning
+
+Checked 2026-08-15. We are behind current on three majors, deliberately:
+
+| Package                 | Ours     | Current  | Call                                                                    |
+| ----------------------- | -------- | -------- | ----------------------------------------------------------------------- |
+| `prisma` / `@prisma/client` | 6.19.3   | 7.9.1    | **Stay.** Revisit only as a README future-improvement                   |
+| `next`                  | 15.5.23  | 16.3.1   | **Stay.** No brief requirement, and the Docker build is working         |
+| `@mantine/core`         | 8.3.18   | 9.5.1    | **Stay.** `design/tokens.ts` was authored against 8 and drops in unmodified |
+| `@nestjs/core`          | 11.x     | 11.2.1   | Current already                                                         |
+| `@tanstack/react-query` | 5.x      | 5.101.4  | Current major already                                                   |
+
+The brief is explicit that library versions are **unspecified** and that nothing requires latest
+majors. An earlier planning pass chose four bleeding-edge majors for a rubric nobody had read,
+and reading the brief deleted them — that is a mistake this document should not re-make from the
+other direction.
+
+**A major upgrade at the end is the worst available timing**: it lands after everything works,
+immediately before submission, with no slack to recover. Prisma 7 in particular changes ESM and
+driver-adapter handling, which is exactly the machinery the two Dockerfiles already fight
+(`prisma generate` after the runtime `--prod` install). The upgrade buys no requirement in the
+brief and risks the one thing the brief does demand: that `docker compose up` works for a
+reviewer.
+
+So: **not upgrading**, and the reason is recorded as a deliberate trade-off in the README's
+"known limitations and future improvements" section — which the brief asks for by name. That
+turns a version gap into a demonstrated decision instead of an oversight.
+
 ## Architecture
 
 ```
