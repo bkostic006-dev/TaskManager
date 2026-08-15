@@ -120,11 +120,9 @@ Each stage ends in something runnable and gets reviewed before the next begins.
 - [x] **3 · Auth end to end** — auth-service (argon2, CAS rotation), gateway DTOs, pipe, filter, interceptor, guard, cookies, RxJS timeout/retry. Tests for rotation. — `833583e` … `60a5078`
       `JWT_SECRET` added to compose and `.env.example` with a `${JWT_SECRET:-dev-only-…}`
       fallback, shared by auth-service (signing) and gateway (verification).
-      ~~The fallback lives **only** in compose: both apps read it with `getOrThrow`, so a real
-      deployment cannot inherit the placeholder by forgetting to set it.~~ **False, corrected in
-      the fix pass below.** `getOrThrow` never fires, because the documented run path always
-      supplies the variable — compose's own default is what it reads. Both apps now compare the
-      configured secret against the placeholder at boot and warn loudly instead.
+      `getOrThrow` never fires, because the documented run path always supplies the variable —
+      compose's own default is what it reads. Both apps compare the configured secret against
+      the placeholder at boot and warn loudly instead.
       _Verified:_ cold `down -v && up --build --wait` → 5/5 healthy in 37s · full curl path
       green — signup `201` + httpOnly cookie scoped to `/auth` (and no refresh token in the
       body) · duplicate `409` · login `200` · wrong password `401` · unknown email the
