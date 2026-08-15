@@ -6,6 +6,7 @@ import { JwtModule } from '@nestjs/jwt';
 import cookieParser from 'cookie-parser';
 import type { ValidationError } from 'class-validator';
 import {
+  ACCESS_TOKEN_TTL,
   DomainError,
   ErrorCode,
   JWT_ALGORITHM,
@@ -51,12 +52,27 @@ import { UpstreamService } from './upstream.service';
       // own header decides how it is checked, which is the shape of every
       // algorithm-confusion bug — and the plan puts RS256 on the roadmap, which
       // is precisely where it would bite.
+      //
+      // `maxAge` is the verifier's own expiry bound, measured from `iat` rather
+      // than from `exp`. Without it the whole expiry guarantee rested on the
+      // signer: an access token has no denylist by design, so a token whose
+      // `exp` had been deleted, or set a century out, verified and was accepted
+      // — both confirmed against the running gateway with tokens forged using
+      // the published development secret. With it, a token is spendable for
+      // ACCESS_TOKEN_TTL after it was minted whatever its `exp` says, and a
+      // token with no `iat` at all is refused outright.
+      //
+      // `requireExp` would be the natural companion and is deliberately absent:
+      // `jsonwebtoken@9` does not implement it — passing it, an exp-less token
+      // still verifies — so the presence check is asserted in JwtAuthGuard
+      // instead, where it is a real check rather than a decorative option.
       useFactory: (config: ConfigService) => ({
         secret: config.getOrThrow<string>('JWT_SECRET'),
         verifyOptions: {
           algorithms: [JWT_ALGORITHM],
           issuer: JWT_ISSUER,
           audience: JWT_AUDIENCE,
+          maxAge: ACCESS_TOKEN_TTL,
         },
       }),
     }),
@@ -89,6 +105,9 @@ import { UpstreamService } from './upstream.service';
     },
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
     { provide: APP_INTERCEPTOR, useClass: LoggingInterceptor },
+    // Global, and before the JWT guard: it applies to whatever spends the
+    // refresh cookie, including routes that do not exist yet, so nothing has to
+    // be remembered when the third one is written.
     { provide: APP_GUARD, useClass: JwtAuthGuard },
   ],
   exports: [UpstreamService],
