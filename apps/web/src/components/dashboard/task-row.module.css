@@ -1,0 +1,121 @@
+/*
+ * The numeral spine, as a grid column.
+ *
+ * Three things here cannot be expressed as Mantine props and are the reason
+ * this file exists at all: the parent-hover-child rule that darkens the row
+ * numeral, revealing the row actions on `:hover` **and** `:focus-within` so a
+ * keyboard reaches them, and the single-row-to-two-row reflow under 48em.
+ * Colours are Mantine variables so the theme stays the one source of them.
+ */
+
+.row {
+  display: grid;
+  grid-template-columns: 44px 22px 1fr auto;
+  gap: 14px;
+  align-items: center;
+  min-height: 48px;
+  padding: 0 16px;
+  transition:
+    box-shadow 120ms ease,
+    border-color 120ms ease,
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+.row:hover {
+  box-shadow: var(--mantine-shadow-sm);
+  border-color: var(--mantine-color-ink-4);
+}
+
+/* Value, not hue: the accent is too close to the neutrals to read as a hover cue. */
+.row:hover .numeral {
+  color: var(--mantine-color-ink-9);
+}
+
+.numeral {
+  font-family: var(--mantine-font-family-headings);
+  font-weight: 600;
+  font-size: 30px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--mantine-color-ink-6);
+  text-align: right;
+  transition: color 120ms ease;
+  user-select: none;
+}
+
+/* Completion replaces the glyph — ink, never the accent, so "done" never reads
+   as "clickable". Same cell, so the left edge does not ripple. */
+.marker {
+  justify-self: end;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--mantine-radius-sm);
+  background: var(--mantine-color-ink-9);
+  color: var(--mantine-color-ink-0);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.trailing {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.row:hover .actions,
+.row:focus-within .actions {
+  opacity: 1;
+}
+
+/* Completed rows recede: tinted surface, no shadow. `row-done` sits between
+   ink.0 and ink.1 and is the one design token with no slot in the ramp. */
+.done {
+  background: #f4f7f7;
+  box-shadow: none;
+}
+
+@media (max-width: 48em) {
+  .row {
+    grid-template-columns: 38px 20px 1fr;
+    gap: 12px;
+    row-gap: 8px;
+    align-items: start;
+    padding: 10px 12px;
+  }
+
+  .numeral,
+  .marker {
+    font-size: 26px;
+    margin-top: 2px;
+  }
+
+  .marker {
+    width: 26px;
+    height: 26px;
+  }
+
+  .checkbox {
+    margin-top: 4px;
+  }
+
+  /* Badge and actions drop under the title as a wrapping meta row. */
+  .trailing {
+    grid-column: 3;
+    flex-wrap: wrap;
+  }
+
+  /* No hover on a touch screen, so the actions can never be revealed by one. */
+  .actions {
+    opacity: 1;
+  }
+}
