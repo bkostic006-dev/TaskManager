@@ -1,21 +1,25 @@
-import { Center, Stack, Text, Title } from '@mantine/core';
+'use client';
 
-// Placeholder screen for stage 1: it exists to prove the theme, the fonts and the
-// palette render end to end. Stage 6 replaces it with the dashboard.
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { Center, Loader } from '@mantine/core';
+
+/**
+ * The root path has no content of its own. It sends the visitor to the
+ * dashboard, whose gate decides whether that means the task list or the login
+ * screen — so "where do I go when I open the app" is answered in exactly one
+ * place instead of two.
+ */
 export default function HomePage() {
+  const router = useRouter();
+
+  useEffect(() => {
+    router.replace('/dashboard');
+  }, [router]);
+
   return (
-    <Center component="main" mih="100dvh" bg="ink.1" p="xl">
-      <Stack align="center" gap="sm">
-        <Title order={1} fz={44} fw={700} lts="0.06em" tt="uppercase" c="ink.9">
-          Tally
-        </Title>
-        <Text ff="heading" fz={30} fw={600} lts="0.01em" c="ink.7">
-          Your day, counted out loud.
-        </Text>
-        <Text fz="md" c="ink.7">
-          The web app is running.
-        </Text>
-      </Stack>
+    <Center mih="100dvh" bg="ink.1">
+      <Loader color="teal.6" type="dots" aria-label="Loading Tally" />
     </Center>
   );
 }

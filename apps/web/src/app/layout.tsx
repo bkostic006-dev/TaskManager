@@ -1,10 +1,11 @@
 import '@mantine/core/styles.css';
+import '@mantine/notifications/styles.css';
 
 import type { Metadata } from 'next';
 import { Atkinson_Hyperlegible, Big_Shoulders } from 'next/font/google';
-import { ColorSchemeScript, MantineProvider, mantineHtmlProps } from '@mantine/core';
+import { ColorSchemeScript, mantineHtmlProps } from '@mantine/core';
 
-import { theme } from '@/theme';
+import { Providers } from './providers';
 
 /**
  * Both faces are self-hosted by `next/font`: the files are fetched once at build
@@ -47,7 +48,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ColorSchemeScript />
       </head>
       <body>
-        <MantineProvider theme={theme}>{children}</MantineProvider>
+        <Providers>{children}</Providers>
       </body>
     </html>
   );
