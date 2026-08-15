@@ -11,7 +11,7 @@ Reviewers to invite at the end: `MFarrugiaCatena` (matthew.farrugia@catenamedia.
 | ---------- | --------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Monorepo   | pnpm workspaces                                                                                           | 4 apps + 1 shared package; Nx is tooling noise at this size                                                                                           |
 | Transport  | **HTTP** (`@nestjs/axios` → `HttpService`)                                                                | Brief allows any transport. Status codes propagate natively, healthchecks are real, and `HttpService` returns Observables so the RxJS bonus falls out |
-| ORM        | **Prisma 6**                                                                                              | Boring and well documented. Prisma 7's ESM/driver-adapter changes buy nothing here                                                                    |
+| ORM        | **Prisma 6** (6.19.3; 7.9.1 is current — see _Versioning_ below)                                          | Boring and well documented. Prisma 7's ESM/driver-adapter changes buy nothing here                                                                    |
 | Data       | One Postgres container, two databases (`auth_db`, `tasks_db`)                                             | Service boundary without container sprawl. No cross-DB foreign key — `Task.userId` is a plain column                                                  |
 | Runtime    | `node:22-slim`                                                                                            | LTS to 2027, widest native-prebuild coverage (argon2). Not alpine                                                                                     |
 | Backend    | NestJS 11                                                                                                 | 12 is still a preview                                                                                                                                 |
@@ -301,6 +301,13 @@ Each stage ends in something runnable and gets reviewed before the next begins.
       four compliance items do not.**
       _Checkpoint:_ the brief's four frontend requirements demonstrated at 360 / 768 / 1280.
 - [ ] **7 · Bonus** — throttler, cache on the list endpoint, retry audit.
+      **Throttle per route, not one global limit.** A single app-wide ceiling is the wrong shape:
+      it is simultaneously too loose for `/auth/login` and `/auth/signup`, where the thing worth
+      limiting is credential guessing and account farming, and too tight for `GET /tasks`, which
+      a legitimate dashboard hits on every filter, sort and page change. One number cannot serve
+      both, and tuning it to protect login makes normal browsing hit `429`. Use `@Throttle()` per
+      controller or handler with a strict limit on the auth writes and a generous one on the task
+      reads, and say in the README why the two differ.
       **The cache is a tenancy bug waiting to happen.** NestJS's `CacheInterceptor` keys on the
       request URL, and `GET /tasks?page=1` is byte-identical for every user — the identity lives
       in the `Authorization` header, which the default key never sees. Dropped in naively, the
@@ -326,6 +333,34 @@ Each stage ends in something runnable and gets reviewed before the next begins.
       re-send; a failure to send it on the last day cannot be recovered. Needs a human: it grants
       two real people access to the repo.
       _Checkpoint:_ you clone it somewhere clean and it runs.
+
+## Final QA
+
+Executed once at stage 8 against the finished app, but **written as we go** — a list composed
+at the end is composed from memory of what was built, not from the brief, so it omits exactly
+what was forgotten. Each stage appends its checkpoint here as it closes.
+
+- **Stages 1–4 checkpoints** are the backend QA and are recorded per stage above: cold boot to
+  5/5 healthy · both databases seeded 47/16/31 · the full auth curl path with every status
+  asserted · rotation under 8 concurrent refreshes · tenancy returning `404` (never `403`,
+  never `503`) on all five task routes · the query contract rejecting every out-of-range
+  parameter · pagination stable across a tie boundary · completion idempotent by `updatedAt`.
+- **Stage 5–6 additions:** the four frontend requirements the brief names — fully responsive,
+  loading indicators, toasts, and API access behind reusable hooks — checked at 360/768/1280,
+  plus a hard refresh keeping the session and a forced API failure showing the error path.
+- **Stage 7 additions:** `429` on rapid auth calls, and a cache test proving two users on a
+  byte-identical query string get different rows.
+- **Stage 8:** fresh clone **as a non-owner account**, `docker compose up`, demo login,
+  paginate and filter. Cloning your own private repo uses credentials the reviewer does not
+  have, so the owner's clone proves nothing about their experience.
+
+Two open notes to resolve in their stages:
+
+- **Throttling is per route, not one global limit.** The brief says "where applicable"; auth
+  endpoints need a tight limit and the task list does not want the same one. Stage 7.
+- **Re-check microservice adherence** against the brief's "Backend Service Responsibilities"
+  section once all three services carry real code — the split has only been judged on the auth
+  and task paths so far. Stage 8's compliance pass.
 
 ## Brief coverage
 
