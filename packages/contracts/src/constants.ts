@@ -33,3 +33,33 @@ export const DEFAULT_PAGE_SIZE = 8;
 
 /** Budget for any single gateway → service call before it is abandoned. */
 export const UPSTREAM_TIMEOUT_MS = 3000;
+
+/**
+ * The throwaway HS256 key `docker-compose.yml` falls back to when `JWT_SECRET`
+ * is unset, so that a bare clone boots with no `.env` step.
+ *
+ * It is duplicated here, as a literal, for one purpose: both apps compare their
+ * configured secret against it at boot and log a warning when they match. It is
+ * a published value in a public repository, so anything signed with it can be
+ * forged by anyone — including a token for {@link DEMO_USER_ID}. Keep it byte
+ * for byte identical to the fallback in `docker-compose.yml`; if they drift,
+ * the warning stops firing and the boot stays silently insecure.
+ */
+export const DEV_ONLY_JWT_SECRET = 'dev-only-not-a-secret-change-me';
+
+/**
+ * Signing algorithm, issuer and audience for the access token — one definition
+ * for the auth service that signs and the gateway that verifies.
+ *
+ * Pinned rather than left to the library's defaults. `jsonwebtoken` will accept
+ * any algorithm the token's own header names unless it is given a list, so an
+ * unpinned verifier is one migration away from algorithm confusion: the moment
+ * signing moves to RS256 and the gateway holds a public key, a token whose
+ * header says `HS256` would be verified *with that public key as an HMAC
+ * secret* — and the public key is public. `issuer` and `audience` are the same
+ * argument one level up: they stop a token minted for something else in the
+ * estate from being spent here.
+ */
+export const JWT_ALGORITHM = 'HS256';
+export const JWT_ISSUER = 'tally-auth';
+export const JWT_AUDIENCE = 'tally-gateway';
