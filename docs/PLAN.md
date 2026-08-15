@@ -302,7 +302,33 @@ Each stage ends in something runnable and gets reviewed before the next begins.
       tenancy scoping is enforced by the type system rather than by remembering. Stage 3.6's
       guard fix guarantees that `userId` is a string before it ever reaches one.
       _Checkpoint:_ curl CRUD, pagination, filter, sort, and a `404` on another user's task.
-- [ ] **5 · Frontend auth** — Next + Mantine + Tally tokens, login/signup, session restore, single-flight refresh interceptor.
+- [x] **5 · Frontend auth** — Next + Mantine + Tally tokens, login/signup, session restore,
+      single-flight refresh interceptor. — `4e9da83` … `d596f07`
+      _Verified, re-run by the orchestrator:_ the abstraction is real and mechanical — `axios`
+      appears in `apps/web/src` only in `lib/api-client.ts` (plus its spec and the manual live
+      check), `fetch(` and `XMLHttpRequest` appear nowhere, and only `hooks/use-auth.ts` imports
+      the client; every page and component goes through a hook · `/login` and `/signup` serve
+      their real mockup copy, `/dashboard` is client-gated · `NEXT_PUBLIC_API_URL` is baked into
+      the shipped chunk as `http://localhost:3001`, not a container hostname · **trap 2 is
+      closed**: with `Origin: http://localhost:3000` the preflight is `204` with
+      `ACAO`/`ACAC`, login `200` sets an `HttpOnly; Path=/auth; SameSite=Lax` cookie with no
+      refresh token in the body, **refresh `200` and rotates**, logout `204`; the same live
+      cookie from `https://evil.example` is `401` on both and **the session survives** ·
+      against the live gateway, a hard refresh restores from the cookie with one refresh call,
+      and 20 parallel `401`s yield **max concurrent refreshes = 1** with the session intact.
+      `pnpm lint`, `pnpm -r typecheck`, **56 tests** green (49 before).
+      _The tests were mutation-checked rather than trusted:_ changing `??=` to `=` in the
+      coordinator fails exactly the two concurrency tests, and the live check then reproduces
+      the real symptom — `ApiRequestError: That session has expired. Log in again.` That is the
+      random-logout bug this stage exists to prevent, demonstrated and then fixed.
+      **Not verified — needs a human with a browser, and stage 6 must close it:** an actual
+      click-through to `/dashboard`; that a real browser sends and stores the refresh cookie on
+      the cross-origin XHR (the live check simulates the jar); the StrictMode double-invoke
+      under `next dev` (`reactStrictMode: true` is now set explicitly, because Next's default is
+      version-dependent and asserting it would be a guess); that F5 keeps you signed in as a
+      gesture rather than as a mechanism; and that toasts, the submit spinner and the redirects
+      behave. None of this was described as working — it was not observed.
+      _Also added:_ `jest`/`ts-jest` to `apps/web`, which had no test runner.
       **Owns the brief's "API interaction should be abstracted using reusable hooks or
       service functions"** as a named deliverable, not a side effect: one `api-client.ts`
       holding the axios instance and the refresh interceptor, and typed hooks over it.
