@@ -46,6 +46,28 @@ export class UpstreamService {
     return this.send(this.http.post<T>(url, body, config), 0);
   }
 
+  /**
+   * Never retried. A `PATCH` is a read-modify-write of whatever the row held
+   * when it arrived, so a second one applied on top of an invisible first is a
+   * different edit, not the same one again.
+   */
+  patch<T>(url: string, body?: unknown, config?: AxiosRequestConfig): Promise<T> {
+    return this.send(this.http.patch<T>(url, body, config), 0);
+  }
+
+  /**
+   * Never retried either, despite `DELETE` being idempotent on the server.
+   *
+   * Idempotence is about the row, and the row is fine — it is the *answer* that
+   * changes. A delete whose acknowledgement was lost has already removed the
+   * task, so the retry finds nothing and reports `404`, and the user is told a
+   * task they just deleted does not exist. Turning a success into an error is
+   * worse than the extra 3 seconds of waiting the retry was meant to save.
+   */
+  delete<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
+    return this.send(this.http.delete<T>(url, config), 0);
+  }
+
   private send<T>(request$: Observable<{ data: T }>, retries: number): Promise<T> {
     return firstValueFrom(
       request$.pipe(
