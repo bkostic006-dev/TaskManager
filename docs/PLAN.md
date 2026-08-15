@@ -93,7 +93,9 @@ These cost real time if discovered late. All six came out of an adversarial revi
 2. **Retry only reads.** RxJS `timeout` + `retry` on every call would retry `POST` and create duplicates.
 3. **Seed across two databases.** Both seeds reference `DEMO_USER_ID` from `contracts`; the task seed skips if tasks already exist, so a second `up` doesn't double the data.
 4. **Login timing oracle.** Verify against a dummy hash when the email is unknown, or response time leaks which emails exist.
-5. **Docker.** `prisma generate` in the build stage, `migrate deploy` in the entrypoint. `HOSTNAME=0.0.0.0` for Next standalone. Postgres port unpublished. `NEXT_PUBLIC_API_URL` is baked at build time — the browser needs `localhost:3001`.
+5. **Docker.** `prisma generate` in the build stage, `migrate deploy` in the entrypoint. `HOSTNAME=0.0.0.0` for Next standalone. Postgres port unpublished. `NEXT_PUBLIC_API_URL` is baked at build time — the browser needs `localhost:3001`. Because it is
+   baked, **changing `GATEWAY_PORT` requires `--build`, not a restart**: `up -d` alone relaunches
+   the old bundle still pointing at the old port, and the failure looks like CORS.
 6. **Cookies.** Gateway needs exact `origin` + `credentials: true`; axios needs `withCredentials: true`. `SameSite=Lax` works here because `localhost:3000`→`:3001` is same-site; it would need `None; Secure` across real domains.
 
 ## Stages
@@ -253,10 +255,6 @@ Each stage ends in something runnable and gets reviewed before the next begins.
       `PATCH {"completed":true}` is `400`, so completion is unreachable as a field edit · all
       seven routes `401` without a token. `pnpm lint`, `pnpm -r typecheck`, **49 tests** green
       (36 before; 13 new).
-      _Noted, not fixed:_ an absent required field returns several validation messages at once
-      (`stopAtFirstError` is not set on the shared pipe). It is the stage-3 pattern, visible on
-      `/auth/signup` too, and the fix belongs to the adversarially-reviewed auth pipeline rather
-      than to this stage.
       **Three things this stage had to build that were easy to miss:**
       1. **task-service needs its own `DomainExceptionFilter`.** auth-service registers one via
          `APP_FILTER` in its `app.module.ts`; task-service has no equivalent. Without it a
@@ -284,9 +282,26 @@ Each stage ends in something runnable and gets reviewed before the next begins.
       service functions"** as a named deliverable, not a side effect: one `api-client.ts`
       holding the axios instance and the refresh interceptor, and typed hooks over it.
       Installing TanStack Query does not satisfy this on its own.
+      **The single-flight refresh promise is mandatory, not a nicety — this is the one place
+      where two correct features destroy each other.** On boot the app calls `/auth/refresh`;
+      React StrictMode double-invokes that effect in development; parallel `401`s fan out into
+      more. Rotation is a compare-and-swap, so the second request is answered `401` — correctly —
+      and the client logs the user out. It presents as "I get randomly logged out", reads as
+      flakiness rather than a race, and eats hours. Trap 1 in this document, and the only trap
+      that spans two stages: the server half shipped in stage 3, the client half ships here.
       _Checkpoint:_ log in in the browser; survives a hard refresh, and no component calls
-      `fetch`/axios directly.
+      `fetch`/axios directly. Also load the app with StrictMode on and confirm the session
+      survives the double-invoked boot refresh.
 - [ ] **6 · Frontend tasks** — dashboard, create/edit/delete/complete, pagination, filter, sort, search, loading states, toasts, responsive.
+      **The softest estimate in this plan.** Every prior version of this stage ran roughly 2×
+      over, because judging a rendered page is a human loop that does not compress. Budget for
+      that rather than discovering it.
+      **Gate on the brief's four frontend items — responsive, loading indicators, toasts, hooks
+      abstraction — and on nothing else.** `design/` removes decisions; it is not a specification
+      to match. This project's single most expensive mistake was treating mockup fidelity as a
+      gate, which turned an accelerator into hours of pixel arbitration. If a screen looks close
+      and behaves correctly, it is done. When time pressure arrives, **fidelity yields first; the
+      four compliance items do not.**
       _Checkpoint:_ the brief's four frontend requirements demonstrated at 360 / 768 / 1280.
 - [ ] **7 · Bonus** — throttler, cache on the list endpoint, retry audit.
       **The cache is a tenancy bug waiting to happen.** NestJS's `CacheInterceptor` keys on the
@@ -300,6 +315,11 @@ Each stage ends in something runnable and gets reviewed before the next begins.
       log line proves the cache works, not that it is safe.
       _Checkpoint:_ `429` on rapid auth; cache hit visible in logs; the two-user cache test green.
 - [ ] **8 · Ship** — README, fresh-clone test on a clean machine, invite reviewers.
+      **Invite the reviewers early — do not leave it to this stage.** It is the one step where
+      "works locally" and "submitted" diverge, and the only requirement with no fallback if
+      something goes wrong at the end. An invitation costs nothing to send now and nothing to
+      re-send; a failure to send it on the last day cannot be recovered. Needs a human: it grants
+      two real people access to the repo.
       _Checkpoint:_ you clone it somewhere clean and it runs.
 
 ## Brief coverage
