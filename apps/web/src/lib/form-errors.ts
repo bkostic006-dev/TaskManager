@@ -1,4 +1,4 @@
-import type { ApiRequestError } from './api-client';
+import type { ApiRequestError } from './api-error';
 
 /**
  * The gateway's per-field validation message for one input, if it named that

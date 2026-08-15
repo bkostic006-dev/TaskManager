@@ -11,7 +11,7 @@ import {
 import { notifications } from '@mantine/notifications';
 import type { Task, TaskListQuery, TaskListResponse } from '@tally/contracts';
 
-import type { ApiRequestError } from '@/lib/api-client';
+import type { ApiRequestError } from '@/lib/api-error';
 import * as tasksApi from '@/lib/tasks-api';
 import type { CreateTaskInput, UpdateTaskInput } from '@/lib/tasks-api';
 

@@ -1,6 +1,7 @@
 import { AUTH_ROUTES, type AuthResponse, type AuthUser } from '@tally/contracts';
 
-import { apiClient, toApiRequestError } from './api-client';
+import { apiClient } from './api-client';
+import { toApiRequestError } from './api-error';
 
 /**
  * The auth endpoints as plain service functions.

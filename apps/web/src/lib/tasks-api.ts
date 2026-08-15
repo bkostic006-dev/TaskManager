@@ -5,7 +5,8 @@ import {
   type TaskListResponse,
 } from '@tally/contracts';
 
-import { apiClient, toApiRequestError } from './api-client';
+import { apiClient } from './api-client';
+import { toApiRequestError } from './api-error';
 
 /**
  * The task endpoints as plain service functions, alongside `auth-api.ts`.

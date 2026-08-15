@@ -4,7 +4,7 @@ import { useEffect, useSyncExternalStore } from 'react';
 import { useMutation, useQueryClient, type UseMutationResult } from '@tanstack/react-query';
 import type { AuthResponse, AuthUser } from '@tally/contracts';
 
-import type { ApiRequestError } from '@/lib/api-client';
+import type { ApiRequestError } from '@/lib/api-error';
 import { restoreSession } from '@/lib/api-client';
 import * as authApi from '@/lib/auth-api';
 import { authSession, type SessionStatus } from '@/lib/auth-session';

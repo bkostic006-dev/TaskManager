@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { Button, Drawer, Group, Stack, Text, Textarea, TextInput } from '@mantine/core';
 import { TASK_DESCRIPTION_MAX_LENGTH, TASK_TITLE_MAX_LENGTH, type Task } from '@tally/contracts';
 
-import type { ApiRequestError } from '@/lib/api-client';
+import type { ApiRequestError } from '@/lib/api-error';
 import { fieldError } from '@/lib/form-errors';
 
 /** The mockup's copy, verbatim: what happened, then what to do about it. */
