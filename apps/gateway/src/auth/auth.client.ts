@@ -21,7 +21,10 @@ export class AuthClient {
     private readonly upstream: UpstreamService,
     config: ConfigService,
   ) {
-    this.baseUrl = config.get<string>('AUTH_SERVICE_URL') ?? 'http://localhost:4001';
+    // `getOrThrow` for the reason main.ts gives about WEB_ORIGIN: a default is
+    // worse than a crash. A missing variable would boot a gateway that looks
+    // healthy and answers every auth call with a `503`.
+    this.baseUrl = config.getOrThrow<string>('AUTH_SERVICE_URL');
   }
 
   signup(body: { email: string; password: string; name: string }): Promise<AuthSession> {

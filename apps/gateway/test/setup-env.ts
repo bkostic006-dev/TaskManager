@@ -9,3 +9,11 @@ process.env.JWT_SECRET ??= 'test-only-signing-key';
 // default here is just a test fixture.
 process.env.WEB_ORIGIN ??= 'http://localhost:3000';
 process.env.COOKIE_SECURE ??= 'false';
+
+// The two upstream base URLs, for the same reason. They used to carry `??`
+// defaults in the clients themselves — the only config in the gateway that did
+// — so a missing variable booted a gateway pointed at nothing and turned every
+// request into a `503`. Nothing in the suite dials these; they exist so the
+// clients can be constructed at all.
+process.env.AUTH_SERVICE_URL ??= 'http://localhost:4001';
+process.env.TASK_SERVICE_URL ??= 'http://localhost:4002';

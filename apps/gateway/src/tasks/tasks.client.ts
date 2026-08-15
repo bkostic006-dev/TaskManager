@@ -27,7 +27,11 @@ export class TasksClient {
     private readonly upstream: UpstreamService,
     config: ConfigService,
   ) {
-    this.baseUrl = config.get<string>('TASK_SERVICE_URL') ?? 'http://localhost:4002';
+    // `getOrThrow`, matching every other environment-dependent value here. A
+    // default would boot a healthy-looking gateway pointed at nothing and turn
+    // every task request into a `503` — a networking-shaped symptom for a
+    // config-shaped cause, which is the most expensive kind to chase.
+    this.baseUrl = config.getOrThrow<string>('TASK_SERVICE_URL');
   }
 
   list(userId: string, query: ListTasksQuery): Promise<TaskListResponse> {
