@@ -13,7 +13,7 @@ import {
 import { CurrentUser, type RequestUser } from '../common/current-user.decorator';
 import { Public } from '../common/public.decorator';
 import { AuthClient } from './auth.client';
-import { clearRefreshCookie, setRefreshCookie } from './refresh-cookie';
+import { clearRefreshCookie, parseCookieSecure, setRefreshCookie } from './refresh-cookie';
 import { LoginDto } from './dto/login.dto';
 import { SignupDto } from './dto/signup.dto';
 
@@ -28,13 +28,13 @@ import { SignupDto } from './dto/signup.dto';
 @Controller(AUTH_ROUTES.base)
 export class AuthController {
   private readonly logger = new Logger(AuthController.name);
-  private readonly webOrigin: string;
+  private readonly cookieSecure: boolean;
 
   constructor(
     private readonly auth: AuthClient,
     config: ConfigService,
   ) {
-    this.webOrigin = config.get<string>('WEB_ORIGIN') ?? 'http://localhost:3000';
+    this.cookieSecure = parseCookieSecure(config.getOrThrow<string>('COOKIE_SECURE'));
   }
 
   @Public()
@@ -101,7 +101,7 @@ export class AuthController {
     @Res({ passthrough: true }) response: Response,
   ): Promise<void> {
     const token = this.readRefreshCookie(request);
-    clearRefreshCookie(response, this.webOrigin);
+    clearRefreshCookie(response, this.cookieSecure);
 
     if (!token) {
       return;
@@ -138,7 +138,7 @@ export class AuthController {
    * exists to prevent.
    */
   private establish(session: AuthSession, response: Response): AuthResponse {
-    setRefreshCookie(response, this.webOrigin, session.refreshToken, session.refreshExpiresAt);
+    setRefreshCookie(response, this.cookieSecure, session.refreshToken, session.refreshExpiresAt);
 
     return { accessToken: session.accessToken, user: session.user };
   }
