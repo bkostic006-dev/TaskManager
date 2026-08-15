@@ -4,6 +4,7 @@ import { Test } from '@nestjs/testing';
 import express from 'express';
 import request from 'supertest';
 import {
+  ACCESS_TOKEN_TTL,
   AUTH_ROUTES,
   AuthSession,
   DomainError,
@@ -14,6 +15,7 @@ import {
 } from '@tally/contracts';
 import { AppModule } from '../src/app.module';
 import { AuthClient } from '../src/auth/auth.client';
+import { JSON_BODY_LIMIT } from '../src/common/json-body';
 
 const SESSION: AuthSession = {
   accessToken: 'signed.access.token',
@@ -57,14 +59,17 @@ describe('Gateway auth', () => {
     // still accepts form encoding, and the test below asserting it does not
     // would pass for the wrong reason.
     app = moduleRef.createNestApplication({ bodyParser: false });
-    app.use(express.json());
+    app.use(express.json({ limit: JSON_BODY_LIMIT }));
     await app.init();
 
+    // `expiresIn` mirrors what the auth service's TokenService actually signs.
+    // Without it the fixture is a token no signer in this system produces — and
+    // the verifier now refuses one with no `exp`, which is the point.
     accessToken = await app
       .get(JwtService)
       .signAsync(
         { sub: 'user-1', email: SESSION.user.email },
-        { issuer: JWT_ISSUER, audience: JWT_AUDIENCE },
+        { issuer: JWT_ISSUER, audience: JWT_AUDIENCE, expiresIn: ACCESS_TOKEN_TTL },
       );
   });
 
@@ -163,9 +168,10 @@ describe('Gateway auth', () => {
   });
 
   it('rejects a token signed with another key', async () => {
+    // Well formed in every other respect, so the key is what refuses it.
     const forged = await new JwtService({ secret: 'not-the-gateways-key' }).signAsync(
       { sub: 'user-2', email: 'mallory@northbay.dev' },
-      { issuer: JWT_ISSUER, audience: JWT_AUDIENCE },
+      { issuer: JWT_ISSUER, audience: JWT_AUDIENCE, expiresIn: ACCESS_TOKEN_TTL },
     );
 
     await request(app.getHttpServer())
@@ -183,7 +189,7 @@ describe('Gateway auth', () => {
       .get(JwtService)
       .signAsync(
         { sub: 'user-2', email: 'mallory@northbay.dev' },
-        { issuer: 'somewhere-else', audience: 'something-else' },
+        { issuer: 'somewhere-else', audience: 'something-else', expiresIn: ACCESS_TOKEN_TTL },
       );
 
     await request(app.getHttpServer())
@@ -260,6 +266,120 @@ describe('Gateway auth', () => {
     const [cookie] = res.headers['set-cookie'] as unknown as string[];
     expect(cookie).toContain(`${REFRESH_COOKIE}=;`);
     expect(cookie).toContain('Expires=Thu, 01 Jan 1970');
+  });
+
+  it('answers a body over the JSON limit with 413, not 500', async () => {
+    // body-parser refuses this before any handler runs, and its error is not an
+    // HttpException — which is how it used to reach the filter's 500 branch and
+    // tell the client the server had broken.
+    const res = await request(app.getHttpServer())
+      .post(AUTH_ROUTES.login)
+      .set('Content-Type', 'application/json')
+      .send(JSON.stringify({ email: 'dana@northbay.dev', password: 'x'.repeat(40_000) }))
+      .expect(413);
+
+    expect(res.body.error).toBe(ErrorCode.PayloadTooLarge);
+    expect(authClient.login).not.toHaveBeenCalled();
+  });
+
+  it("answers a body nested past the pipe's recursion depth with 400, not 500", async () => {
+    // JSON.parse handles this fine; ValidationPipe's recursive proto-key strip
+    // does not, and the resulting RangeError was a 500. The client sent
+    // something unreasonable, so it is a 400.
+    const res = await request(app.getHttpServer())
+      .post(AUTH_ROUTES.login)
+      .set('Content-Type', 'application/json')
+      .send('['.repeat(10_000) + ']'.repeat(10_000))
+      .expect(400);
+
+    expect(res.body.error).toBe(ErrorCode.Validation);
+    expect(authClient.login).not.toHaveBeenCalled();
+  });
+
+  it('rejects a verified token whose claims are not the shape they promise', async () => {
+    // A signature says who wrote the payload, not what is in it. `sub` as a
+    // one-element array stringifies back to the same uuid, so every check
+    // downstream of here would have passed it — and stage 4 splices `userId`
+    // into a query builder.
+    const arraySub = await app
+      .get(JwtService)
+      .signAsync(
+        { sub: ['user-1'], email: SESSION.user.email, exp: Math.floor(Date.now() / 1000) + 900 },
+        { issuer: JWT_ISSUER, audience: JWT_AUDIENCE },
+      );
+
+    await request(app.getHttpServer())
+      .get(AUTH_ROUTES.me)
+      .set('Authorization', `Bearer ${arraySub}`)
+      .expect(401);
+
+    expect(authClient.findUser).not.toHaveBeenCalled();
+  });
+
+  it('rejects a token with no exp, and one whose exp is beyond the token lifetime', async () => {
+    const jwt = app.get(JwtService);
+    const now = Math.floor(Date.now() / 1000);
+
+    // No `exp` at all: `jsonwebtoken` verifies this happily, and the guard is
+    // what refuses it.
+    const noExpiry = await jwt.signAsync(
+      { sub: 'user-1', email: SESSION.user.email },
+      { issuer: JWT_ISSUER, audience: JWT_AUDIENCE },
+    );
+    await request(app.getHttpServer())
+      .get(AUTH_ROUTES.me)
+      .set('Authorization', `Bearer ${noExpiry}`)
+      .expect(401);
+
+    // An `exp` a century out on a token minted an hour ago: well formed, and
+    // refused by `maxAge` because the verifier no longer takes the signer's
+    // word for how long its own tokens live.
+    const immortal = await jwt.signAsync(
+      { sub: 'user-1', email: SESSION.user.email, iat: now - 3600, exp: now + 3_153_600_000 },
+      { issuer: JWT_ISSUER, audience: JWT_AUDIENCE },
+    );
+    await request(app.getHttpServer())
+      .get(AUTH_ROUTES.me)
+      .set('Authorization', `Bearer ${immortal}`)
+      .expect(401);
+
+    expect(authClient.findUser).not.toHaveBeenCalled();
+  });
+
+  it('refuses to spend the refresh cookie for a page from another origin', async () => {
+    authClient.refresh.mockResolvedValue(SESSION);
+
+    // Not exploitable while the cookie is SameSite=Lax, but the deployment the
+    // plan describes needs SameSite=None, and then this POST arrives with the
+    // cookie attached. Logout needs it as much as refresh: a forced logout
+    // needs no readable response.
+    await request(app.getHttpServer())
+      .post(AUTH_ROUTES.refresh)
+      .set('Cookie', `${REFRESH_COOKIE}=${SESSION.refreshToken}`)
+      .set('Origin', 'https://evil.example')
+      .expect(401);
+
+    await request(app.getHttpServer())
+      .post(AUTH_ROUTES.logout)
+      .set('Cookie', `${REFRESH_COOKIE}=${SESSION.refreshToken}`)
+      .set('Origin', 'https://evil.example')
+      .expect(401);
+
+    expect(authClient.refresh).not.toHaveBeenCalled();
+    expect(authClient.logout).not.toHaveBeenCalled();
+
+    // The web app's own origin, and a client that sends none at all — curl, the
+    // README's examples — both still work.
+    await request(app.getHttpServer())
+      .post(AUTH_ROUTES.refresh)
+      .set('Cookie', `${REFRESH_COOKIE}=${SESSION.refreshToken}`)
+      .set('Origin', process.env.WEB_ORIGIN as string)
+      .expect(200);
+
+    await request(app.getHttpServer())
+      .post(AUTH_ROUTES.refresh)
+      .set('Cookie', `${REFRESH_COOKIE}=${SESSION.refreshToken}`)
+      .expect(200);
   });
 
   it('still logs out when the auth service cannot revoke the token', async () => {
