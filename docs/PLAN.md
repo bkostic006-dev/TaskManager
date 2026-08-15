@@ -366,7 +366,21 @@ Each stage ends in something runnable and gets reviewed before the next begins.
       making a narrowing change skip the page reset fails exactly two tests; making
       `pageWithinBounds` return its input unchanged fails a third. Restored and green.
       **Still unmet — every one needs a human with a browser.** These are the stage's checkpoint,
-      not a postscript, and five of them were already carried forward unverified from stage 5:
+      not a postscript, and five of them were already carried forward unverified from stage 5.
+      **They are not chased piecemeal.** By the user's call, browser verification happens as
+      **one full QA pass at the end of the frontend**, timed to their token refresh — so these
+      merge into that pass rather than being re-attempted per stage.
+      _Two things that pass must control for:_
+      - **Run it in a clean profile or incognito, extensions disabled.** The first smoke test
+        showed `[WIREFRAMEIT] - Content Core Script loaded` in the console, which is an
+        extension, not this app. Without a clean profile our noise cannot be separated from
+        theirs.
+      - **`:3001/auth/refresh → 401` is expected or serious depending purely on where it sits in
+        the network panel, and the panel is the only thing that tells you which.** *Before* a
+        login it is the boot-time silent restore finding no cookie — correct, and precisely how
+        the app decides to show `/login`. *After* a successful login it is real, and means either
+        the refresh cookie is not riding the cross-origin XHR or the single-flight is not
+        holding. Do not read it as a bug on sight, and do not dismiss it either.
       1. a real click-through — `/` bounces to `/login`, demo credentials, land on `/dashboard`
       2. a real browser sends and stores the refresh cookie on the cross-origin XHR
       3. StrictMode double-invoke under `next dev` does not log you out (trap 1)
