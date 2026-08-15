@@ -67,7 +67,7 @@ No `dueDate` — not in the brief, and cutting it removes a timezone bug class. 
 | GET · PATCH · DELETE | `/tasks/:id`                          | 200 · 200 · 204                          |
 | PATCH                | `/tasks/:id/complete` · `/uncomplete` | 200                                      |
 
-**Errors:** `400` validation · `401` missing/expired/invalid token · `404` not found _or not yours_ · `409` email taken · `429` throttled · `500` unexpected · `503` upstream service unreachable or timed out. Uniform body `{ statusCode, error, message, details? }` from one global filter.
+**Errors:** `400` validation · `401` missing/expired/invalid token · `404` not found _or not yours_ · `409` email taken · `413` body over the gateway's JSON limit · `429` throttled · `500` unexpected · `503` upstream service unreachable or timed out. Uniform body `{ statusCode, error, message, details? }` from one global filter.
 
 **List contract**
 
