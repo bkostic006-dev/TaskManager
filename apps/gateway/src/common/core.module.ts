@@ -15,6 +15,7 @@ import {
   UPSTREAM_TIMEOUT_MS,
 } from '@tally/contracts';
 import { AllExceptionsFilter } from './all-exceptions.filter';
+import { CookieOriginGuard } from './cookie-origin.guard';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { LoggingInterceptor } from './logging.interceptor';
 import { UpstreamService } from './upstream.service';
@@ -108,6 +109,7 @@ import { UpstreamService } from './upstream.service';
     // Global, and before the JWT guard: it applies to whatever spends the
     // refresh cookie, including routes that do not exist yet, so nothing has to
     // be remembered when the third one is written.
+    { provide: APP_GUARD, useClass: CookieOriginGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
   ],
   exports: [UpstreamService],
