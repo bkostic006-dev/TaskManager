@@ -46,6 +46,13 @@ const UNAUTHORIZED_BODY = {
   message: 'That session has expired. Log in again.',
 };
 
+/** What the gateway's throttler guard actually emits, message included. */
+const THROTTLED_BODY = {
+  statusCode: 429,
+  error: ErrorCode.Throttled,
+  message: 'Too many requests. Wait a moment and try again.',
+};
+
 function deferred(): { promise: Promise<void>; release: () => void } {
   let release!: () => void;
   const promise = new Promise<void>((resolve) => {
@@ -143,7 +150,11 @@ describe('api-client: single-flight refresh', () => {
     await Promise.all([restore, request]);
 
     expect(refreshes).toBe(1);
-    expect(session.authSession.getSnapshot()).toEqual({ user: USER, status: 'ready' });
+    expect(session.authSession.getSnapshot()).toEqual({
+      user: USER,
+      status: 'ready',
+      unavailableReason: null,
+    });
   });
 
   it('runs the boot restore once however many times it is called (StrictMode double-invoke)', async () => {
@@ -162,7 +173,7 @@ describe('api-client: single-flight refresh', () => {
     expect(session.authSession.getSnapshot().user).toEqual(USER);
   });
 
-  it('clears the session when the refresh fails, and surfaces the original failure', async () => {
+  it('clears the session when the refresh is refused, and surfaces the original failure', async () => {
     const { client, session } = await load();
     let refreshes = 0;
 
@@ -184,7 +195,36 @@ describe('api-client: single-flight refresh', () => {
 
     expect(refreshes).toBe(1);
     expect(session.authSession.getAccessToken()).toBeNull();
-    expect(session.authSession.getSnapshot()).toEqual({ user: null, status: 'ready' });
+    expect(session.authSession.getSnapshot()).toEqual({
+      user: null,
+      status: 'ready',
+      unavailableReason: null,
+    });
+  });
+
+  it('keeps the session when the refresh is throttled, so one noisy client cannot sign the rest out', async () => {
+    const { client, session } = await load();
+
+    client.apiClient.defaults.adapter = async (config: InternalAxiosRequestConfig) => {
+      if (config.url === AUTH_ROUTES.refresh) {
+        return fail(config, 429, THROTTLED_BODY);
+      }
+      return fail(config, 401, UNAUTHORIZED_BODY);
+    };
+
+    session.authSession.start({ accessToken: 'live-token', user: USER });
+
+    // The caller still learns their own request failed…
+    await expect(client.apiClient.get('/tasks')).rejects.toMatchObject({ statusCode: 401 });
+
+    // …but `/auth/refresh` sits in an IP-tracked bucket shared by everyone
+    // behind the bridge address, so its 429 says nothing about this credential.
+    expect(session.authSession.getAccessToken()).toBe('live-token');
+    expect(session.authSession.getSnapshot()).toEqual({
+      user: USER,
+      status: 'ready',
+      unavailableReason: null,
+    });
   });
 
   it('does not retry a request that has already been replayed once', async () => {
@@ -261,5 +301,57 @@ describe('api-client: single-flight refresh', () => {
     });
 
     expect(refreshes).toBe(0);
+  });
+});
+
+/**
+ * Boot has to end somewhere. `RequireAuth` holds a spinner for as long as the
+ * session store says `restoring`, and nothing but `restoreSession` will ever
+ * answer that question — so every way the first refresh can fail has to leave a
+ * terminal state behind, and only one of them means "logged out".
+ */
+describe('api-client: the boot restore always reaches a terminal state', () => {
+  it('ends throttled boot as unavailable, holding the gateway’s reason for the login page', async () => {
+    const { client, session } = await load();
+
+    client.apiClient.defaults.adapter = async (config: InternalAxiosRequestConfig) =>
+      fail(config, 429, THROTTLED_BODY);
+
+    await client.restoreSession();
+
+    expect(session.authSession.getSnapshot()).toEqual({
+      user: null,
+      status: 'unavailable',
+      unavailableReason: THROTTLED_BODY.message,
+    });
+  });
+
+  it('ends a refused boot as ready with nobody signed in — no cookie is not an error', async () => {
+    const { client, session } = await load();
+
+    client.apiClient.defaults.adapter = async (config: InternalAxiosRequestConfig) =>
+      fail(config, 401, UNAUTHORIZED_BODY);
+
+    await client.restoreSession();
+
+    expect(session.authSession.getSnapshot()).toEqual({
+      user: null,
+      status: 'ready',
+      unavailableReason: null,
+    });
+  });
+
+  it('ends an unreachable boot as unavailable rather than as a logged-out user', async () => {
+    const { client, session } = await load();
+
+    client.apiClient.defaults.adapter = async () => {
+      throw new AxiosError('Network Error', AxiosError.ERR_NETWORK);
+    };
+
+    await client.restoreSession();
+
+    const snapshot = session.authSession.getSnapshot();
+    expect(snapshot.status).toBe('unavailable');
+    expect(snapshot.unavailableReason).not.toBeNull();
   });
 });
