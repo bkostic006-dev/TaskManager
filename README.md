@@ -94,7 +94,7 @@ It answers `{ data: Task[], meta: { page, pageSize, total, totalPages } }`.
 
 ## Tests
 
-69 tests across 14 spec files, split between unit specs beside the code they cover (`src/**/*.spec.ts`) and end-to-end specs driving a booted Nest app with mocked upstreams (`apps/*/test/*.e2e-spec.ts` — worth naming, because a glob for `*.spec.ts` alone finds only 39 of them).
+81 tests across 15 spec files: 51 unit tests beside the code they cover (`src/**/*.spec.ts`) and 30 end-to-end tests driving a booted Nest app with mocked upstreams (`apps/*/test/*.e2e-spec.ts`). Both conventions are worth naming, because a glob for `*.spec.ts` alone matches none of the second group.
 
 They cover the logic that genuinely branches: refresh-token rotation and its compare-and-swap under concurrency, the list query builder, completion transitions, the gateway's status codes and validation rules, the task-list cache keyed per user, throttling, and the web client's single-flight refresh coordinator. There are deliberately no UI snapshots, CSS regression tests, or exhaustive validator permutations.
 

@@ -51,7 +51,7 @@ Before a stage's checkpoint closes:
 
 ## Tests
 
-Written **after** the code in each stage works, covering logic that actually branches: token rotation, the list query builder, completion transitions, and gateway status-code/validation checks. **69 across 14 spec files** as of stage 7 — the target started at "roughly 25" and grew because each stage added branching logic worth pinning: the cache's per-user key, throttle envelopes, the refresh compare-and-swap under concurrency, the web client's single-flight coordinator. The number is a measurement, not a budget; do not delete tests to hit an older figure.
+Written **after** the code in each stage works, covering logic that actually branches: token rotation, the list query builder, completion transitions, and gateway status-code/validation checks. **81 across 15 spec files** (51 unit · 30 e2e), measured after stage 7 — the target started at "roughly 25" and grew because each stage added branching logic worth pinning: the cache's per-user key, throttle envelopes, the refresh compare-and-swap under concurrency, the web client's single-flight coordinator. The number is a measurement, not a budget; do not delete tests to hit an older figure.
 
 Do not add UI snapshots, CSS regression tests, library-internals tests, or exhaustive validator permutations. The brief never asks for tests at all — the suite exists to show judgment, so its size is part of the signal.
 
