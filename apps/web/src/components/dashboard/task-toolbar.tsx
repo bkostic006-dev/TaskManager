@@ -100,12 +100,7 @@ export function TaskToolbar({
         />
 
         <Box ml={{ base: 0, sm: 'auto' }} w={{ base: '100%', sm: 'auto' }}>
-          <Button
-            fullWidth
-            h={36}
-            onClick={onNewTask}
-            leftSection={<IconPlus size={15} />}
-          >
+          <Button fullWidth h={36} onClick={onNewTask} leftSection={<IconPlus size={15} />}>
             New task
           </Button>
         </Box>

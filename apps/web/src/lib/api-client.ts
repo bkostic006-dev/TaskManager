@@ -62,7 +62,6 @@ export const apiClient = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
-
 apiClient.interceptors.request.use((config) => {
   if (config.anonymous === true) {
     return config;
