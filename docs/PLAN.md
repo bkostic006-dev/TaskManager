@@ -404,7 +404,110 @@ Each stage ends in something runnable and gets reviewed before the next begins.
       and behaves correctly, it is done. When time pressure arrives, **fidelity yields first; the
       four compliance items do not.**
       _Checkpoint:_ the brief's four frontend requirements demonstrated at 360 / 768 / 1280.
-- [ ] **7 · Bonus** — throttler, cache on the list endpoint, retry audit.
+- [x] **7 · Bonus** — throttler, cache on the list endpoint, retry audit. — `b87fe03` … `f56086e`
+      **An adversarial review ran against the cache key and the throttler**, per CLAUDE.md's rule
+      for a stage touching tenancy. It found four real defects. All were fixed **before anything
+      was committed**, so none of them ever shipped, and each is documented at the place it
+      happened rather than only here:
+      1. **`HEAD /tasks` retired the caller's entire cache.** Express routes `HEAD` to the `GET`
+         handler, so it fell into the "not `GET`, therefore a write" branch. Any browser
+         prefetch or uptime probe silently turned the cache off, and a client could defeat it
+         deliberately at 120 HEADs a minute. Now tested against a shared `SAFE_METHODS`, which
+         `CookieOriginGuard` already defined correctly — reusing it would have prevented this.
+      2. **A second `?` collapsed two different queries onto one key**, in both directions:
+         `split('?')` discarded everything after the second `?`, so
+         `/tasks?search=birthday?anything` was keyed as `/tasks?search=birthday` and the wrong
+         answer was stored under the innocent key. Contained to one user, and unreachable from
+         the shipped client, which percent-encodes `?`. Now splits on the first `?` only.
+      3. **The `request.path === '/tasks'` gate disagreed with the router.** `/tasks/`, `/TASKS`
+         and `/Tasks` all reach `list()` and were silently uncached. Failed closed, so not a
+         leak — now a marker read off the handler, which cannot drift.
+      4. **A credential-less flood denies an authenticated user their writes.** Not fixed;
+         documented. See the limitation below.
+      _Re-verified by the orchestrator after those fixes, because they touched the key builder:_
+      two users on a byte-identical query string still get `MISS`→`HIT` on their **own** rows
+      with **zero shared ids**, and the mutation check still reproduces the real bug — removing
+      `userId` from the key serves user two user one's task. `HEAD` now leaves the cache intact;
+      `?search=birthday?anything` gets its own key and the correct 0 rows; `/tasks/` and `/TASKS`
+      are now cached. `429` first appears at request **241** against a 240 limit, in the uniform
+      envelope, and the rate-limit log line reads `GET /tasks 429 — over 240 per 60000ms` with
+      **no query string** — a canary search term appears zero times in it. 69 tests green.
+      **Documented limitation, measured not softened — owed to the README:** the throttler runs
+      first, ahead of `JwtAuthGuard`, which it must or a flood of wrong passwords would be
+      rejected without touching the counter. So it cannot know who is calling, and
+      **credential-less requests spend the bucket of routes that require credentials**: 121
+      requests with no `Authorization` header at all exhaust the default bucket, after which the
+      demo user's own `POST /tasks` is `429` for the rest of the window (her reads still work,
+      being a different handler's bucket). The fix is a second tier keyed on
+      `request.user.userId` registered after the JWT guard — not built, because doing it properly
+      needs two guards with two skip-lists, and the shortcut of trusting the bearer token before
+      verifying it is *worse* than the limitation, since an attacker rotates garbage tokens for
+      unlimited buckets.
+      _Built:_ `@nestjs/throttler` with **three limits, not one** — `authWrite` 10/60s on
+      `POST /auth/login` and `/auth/signup`, `taskRead` 240/60s on `GET /tasks`, and a 120/60s
+      default for everything else. `DomainThrottlerGuard` overrides `throwThrottlingException`
+      to raise a `DomainError(Throttled)`, so `429` leaves through the same filter branch as
+      every other error; `ErrorCode.Throttled` and `ERROR_STATUS[…] = 429` are new in
+      `contracts`. Registered as the **first** global guard, ahead of the origin and JWT guards,
+      so unauthenticated floods are counted rather than rejected uncounted.
+      `@nestjs/cache-manager` in-memory on `GET /tasks` only, keyed
+      `tasks:list:<userId>:<generation>:<sorted url>`.
+      _Verified against the running stack, 5/5 healthy after a cold `down -v && up --build
+      --wait` in 40s:_ **two accounts issuing the byte-identical URL
+      `/tasks?page=1&pageSize=8&status=all` get different rows** — 47 rows against 2, **zero
+      shared task ids**, and the second caller's response is `X-Cache: MISS`, so it was answered
+      by the task service rather than from the first caller's entry · a repeat of the same URL by
+      the same user is `X-Cache: HIT` at 0–4ms against 16ms cold · **60 list requests** of the
+      shape a real dashboard produces (paging, three status filters, two sorts, three search
+      keystrokes, three page sizes) are **60 × `200`**, with `X-RateLimit-Remaining: 172` of 240
+      left · the tenth login attempt inside a minute is `429` with `Retry-After: 60` and the body
+      `{"statusCode":429,"error":"THROTTLED","message":"Too many requests. Wait a moment and try
+      again."}` — the same three keys as the `400`, `401` and `404` bodies checked beside it · a
+      spent login bucket leaves `GET /tasks`, `/auth/me` and `POST /auth/signup` at
+      `200`/`200`/`201`, which is the per-handler bucketing holding · CORS preflights are not
+      counted, so a browser's `OPTIONS` cannot eat a user's login allowance.
+      `pnpm lint`, `pnpm -r typecheck`, **69 tests** green (64 before; 5 new).
+      _The cache key was mutation-checked, per the standard set in stage 5:_ deleting `userId`
+      from the key fails exactly the two-user test, and it fails by **reproducing the real bug** —
+      the second user is served the first user's task. Restored and green.
+      _Two claims proved rather than asserted:_ `HttpService` is injectable only inside
+      `CoreModule`, so a call site bypassing `UpstreamService` is a **boot failure**, not a silent
+      escape — adding it to `TasksClient` gives `Nest can't resolve dependencies of the
+      TasksClient (UpstreamService, ?, ConfigService)` · a request a guard rejects produces **no
+      request log line at all**, because `LoggingInterceptor` logs from `finish` and interceptors
+      do not run for a guard rejection; measured 97 request lines with zero guard rejections among
+      them. That is pre-existing and applies equally to the guards' `401`s, but it would have made
+      the new rate limit invisible exactly when it fires, so `DomainThrottlerGuard` writes its own
+      `WARN` line — `[RateLimit] POST /auth/login 429 — over 10 per 60000ms`.
+      _One thing built beyond the letter of the stage, and it is the judgement call to review
+      first:_ a **per-user generation counter** that a write bumps, so the cache is retired for the
+      writer. A short TTL alone was not acceptable here — the dashboard invalidates its own query
+      and refetches the instant a mutation succeeds, so a bare TTL would have answered that
+      refetch from the cache and made the user's own new task invisible for five seconds. That is
+      a shipped feature regressing for a bonus mark. It is twenty lines and one provider, not an
+      invalidation framework; the TTL stays short anyway, because a second gateway replica would
+      have a counter this one knows nothing about.
+      _Retry audit — audited, not rewritten, and nothing changed:_ all 12 public routes reach a
+      service through `UpstreamService` and only through it. Every call is
+      `timeout(UPSTREAM_TIMEOUT_MS)`; **only the three reads retry** (`/auth/me`, `GET /tasks`,
+      `GET /tasks/:id`), once, and only on a timeout, a connection failure or a `5xx` — a `4xx` is
+      the service's considered answer and is not retried. The nine writes do not.
+      `POST /auth/refresh` is the case that most justifies the policy: rotation is a
+      compare-and-swap, so a retry after a lost response would present a token the first attempt
+      had already revoked, get `401`, and log out a user whose rotation had in fact succeeded. The
+      one place the policy is stricter than it needs to be is `/complete` and `/uncomplete`, which
+      stage 4 proved idempotent — retrying them would be safe, and they are still not retried,
+      because deciding per call site is the "just this once" the class exists to prevent. That is
+      the safe direction to be wrong in.
+      _Deliberately not built:_ Redis for either the throttler or the cache (named out of scope) ·
+      any caching of `/auth/me` or task detail · ETags or HTTP cache headers · per-account rather
+      than per-IP login tracking · a second, longer throttle tier. All are README
+      future-improvement lines, not omissions.
+      _Known and unchanged:_ a `503` on a write still means the gateway stopped waiting, not that
+      the write did not happen. Idempotency keys are the fix and are out of scope.
+      _Checkpoint:_ met — `429` on rapid auth, cache hit visible, the two-user cache test green.
+      _The stage as written before it was built, kept because the reasoning is what shaped the
+      result:_
       **Throttle per route, not one global limit.** A single app-wide ceiling is the wrong shape:
       it is simultaneously too loose for `/auth/login` and `/auth/signup`, where the thing worth
       limiting is credential guessing and account farming, and too tight for `GET /tasks`, which
@@ -421,7 +524,6 @@ Each stage ends in something runnable and gets reviewed before the next begins.
       cache inside the task service where the query already carries the user. **Needs a test that
       two different users issuing the identical query string get different rows** — a cache-hit
       log line proves the cache works, not that it is safe.
-      _Checkpoint:_ `429` on rapid auth; cache hit visible in logs; the two-user cache test green.
 - [ ] **8 · Ship** — README, fresh-clone test on a clean machine, invite reviewers.
       **Do not send-and-assume.** The repo is private, so access depends on an invitation
       being accepted. `MFarrugiaCatena` is verified to exist and is Matthew Farrugia. Ricardo
@@ -453,15 +555,18 @@ what was forgotten. Each stage appends its checkpoint here as it closes.
   loading indicators, toasts, and API access behind reusable hooks — checked at 360/768/1280,
   plus a hard refresh keeping the session and a forced API failure showing the error path.
 - **Stage 7 additions:** `429` on rapid auth calls, and a cache test proving two users on a
-  byte-identical query string get different rows.
+  byte-identical query string get different rows. Both done and recorded in the stage above; the
+  one to re-run at stage 8 is the two-user check against a **freshly seeded** stack, because a
+  cache that is safe on a warm process is not evidence about a cold one.
 - **Stage 8:** fresh clone **as a non-owner account**, `docker compose up`, demo login,
   paginate and filter. Cloning your own private repo uses credentials the reviewer does not
   have, so the owner's clone proves nothing about their experience.
 
 Two open notes to resolve in their stages:
 
-- **Throttling is per route, not one global limit.** The brief says "where applicable"; auth
-  endpoints need a tight limit and the task list does not want the same one. Stage 7.
+- ~~**Throttling is per route, not one global limit.**~~ **Resolved in stage 7.** Three limits:
+  10/60s on the auth writes, 240/60s on `GET /tasks`, 120/60s default. Verified that a
+  60-request dashboard burst stays `200` while the tenth login in a minute is `429`.
 - **Re-check microservice adherence** against the brief's "Backend Service Responsibilities"
   section once all three services carry real code — the split has only been judged on the auth
   and task paths so far. Stage 8's compliance pass.
@@ -496,8 +601,8 @@ orphaned requirement obvious. Re-audited with fresh eyes at stages 4 and 8.
 | API abstracted behind reusable hooks or service functions    | 5 ✓       |
 | Fully responsive · loading indicators · toasts               | 6         |
 | Clean architecture across services                           | 3 ✓ · 4 ✓ |
-| Bonus: rate limiting and caching                             | 7         |
-| Bonus: RxJS for service comms / retry                        | 3 · 7     |
+| Bonus: rate limiting and caching                             | 7 ✓       |
+| Bonus: RxJS for service comms / retry                        | 3 ✓ · 7 ✓ |
 | README: run locally · trade-offs · limitations               | 1 ✓ · 8   |
 | GitHub repo + access for both reviewers                      | 8         |
 | Clear and meaningful commit history                          | ongoing   |
@@ -507,6 +612,12 @@ orphaned requirement obvious. Re-audited with fresh eyes at stages 4 and 8.
 The brief names three: **how to run locally** · **key design decisions and trade-offs** · **known limitations and future improvements**. Plus an architecture diagram (mermaid renders on GitHub).
 
 Trade-offs worth writing: HTTP over TCP transport · two databases in one container · access token in memory + refresh in an httpOnly cookie · SHA-256 for opaque refresh tokens vs argon2 for passwords · gateway-local HS256 verification (RS256 in production) · `404` rather than `403` for other users' tasks · CSR-only protected pages · **staying on Prisma 6, Next 15 and Mantine 8 rather than chasing latest majors** (see _Versioning_).
+
+**Three stage 7 adds**, and the first two are what a reviewer will look for by name because the brief names the bonus:
+
+1. **Why there are three rate limits and not one.** Ten per minute on `/auth/login` and `/auth/signup`, 240 on `GET /tasks`, 120 everywhere else. One number tuned to make credential guessing expensive makes a dashboard changing filters answer `429`; one tuned for browsing is worthless against a login attacker. Say the numbers and say the reason — including why the auth number is ten rather than five: the guard runs **before** the validation pipe, so a rejected field spends the allowance exactly as a wrong password does, and `/signup`'s form is `noValidate`. At five, a new user who trips the password minimum, then the email format, then finds the address taken is told "too many requests" while filling in a form for the first time.
+2. **The cache key starts with the `userId`, and why that is not optional.** `GET /tasks?page=1&pageSize=8` is byte-identical for every user, so the URL-keyed default would serve the first caller's tasks to the second. It belongs in the README rather than only in the code, because "we added caching" reads as a performance note and this one is a tenancy control.
+3. **Tracking is per IP and storage is in-process**, which is honest about what the limit is worth: behind Docker's published port every host request shares a bucket, and two gateway replicas would mean two counters and twice the allowance. Redis is the fix and is already on the future list.
 
 **Two the stage-4 architecture audit says belong here rather than only in a code comment**, because a reviewer reading the docs will not find them otherwise:
 
