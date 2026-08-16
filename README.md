@@ -45,6 +45,8 @@ flowchart TD
 
 The gateway is the only publicly reachable backend surface. It owns request validation, authentication guards, request logging, and exception filtering; the two services behind it hold domain logic and own their own database. Shared types cross service boundaries only through the `@tally/contracts` package — no service imports from another.
 
+Over HTTP this can read as three web apps that happen to call each other, so it is worth naming where the separation is actually enforced: in `docker-compose.yml`, not in convention. `auth-service` and `task-service` declare no `ports:` block at all and sit only on the `internal` network, which is marked `internal: true`. Nothing outside that segment can route to them, and `web` is not on it — so "the task service is only accessible via the API Gateway" is a property of the topology, checkable by reading twelve lines of compose, rather than a rule the code is trusted to follow.
+
 | Path                 | What                                               |
 | -------------------- | -------------------------------------------------- |
 | `apps/web`           | Next.js 15 · React 19 · Mantine 8 · TanStack Query |
@@ -52,6 +54,43 @@ The gateway is the only publicly reachable backend surface. It owns request vali
 | `apps/auth-service`  | NestJS 11 — users, JWTs, refresh-token rotation    |
 | `apps/task-service`  | NestJS 11 — task CRUD, completion, pagination      |
 | `packages/contracts` | Shared types, route constants, error codes         |
+
+## API
+
+Every route below is served by the gateway on `:3001`. "Auth" means a `Bearer` access token is required — the global `JwtAuthGuard` protects everything except the routes marked no.
+
+| Method   | Path                    | Success | Auth | Notes                                                    |
+| -------- | ----------------------- | ------- | ---- | -------------------------------------------------------- |
+| `POST`   | `/auth/signup`          | `201`   | no   | Sets the refresh cookie; returns `{ accessToken, user }` |
+| `POST`   | `/auth/login`           | `200`   | no   | Same body and cookie as signup                           |
+| `POST`   | `/auth/refresh`         | `200`   | no   | Credential is the cookie, not a header; rotates it       |
+| `POST`   | `/auth/logout`          | `204`   | no   | Always clears the cookie                                 |
+| `GET`    | `/auth/me`              | `200`   | yes  | The account behind the presented token                   |
+| `GET`    | `/tasks`                | `200`   | yes  | Paged, filtered, sorted — see below                      |
+| `POST`   | `/tasks`                | `201`   | yes  |                                                          |
+| `GET`    | `/tasks/:id`            | `200`   | yes  |                                                          |
+| `PATCH`  | `/tasks/:id`            | `200`   | yes  | Title and description only                               |
+| `DELETE` | `/tasks/:id`            | `204`   | yes  |                                                          |
+| `PATCH`  | `/tasks/:id/complete`   | `200`   | yes  | Idempotent; does not re-stamp `completedAt`              |
+| `PATCH`  | `/tasks/:id/uncomplete` | `200`   | yes  | Idempotent                                               |
+| `GET`    | `/health`               | `200`   | no   | For the compose healthcheck                              |
+
+Completion is a domain action rather than a field edit, which is why `/complete` and `/uncomplete` exist and `PATCH /tasks/:id` will not toggle `completed`.
+
+**`GET /tasks` query parameters.** All optional; the task service supplies the defaults. An out-of-range value is a `400`, never silently clamped — a clamped `pageSize` would render "48 per page" over 8 rows and let the client conclude the user has 8 tasks.
+
+| Parameter   | Values                                                          | Default     |
+| ----------- | --------------------------------------------------------------- | ----------- |
+| `page`      | integer ≥ 1                                                     | `1`         |
+| `pageSize`  | `8` · `16` · `24` · `48`                                        | `8`         |
+| `status`    | `all` · `completed` · `pending`                                 | `all`       |
+| `search`    | ≤ 100 chars, case-insensitive contains on title and description | —           |
+| `sortBy`    | `createdAt` · `completed` · `title`                             | `createdAt` |
+| `sortOrder` | `asc` · `desc`                                                  | `desc`      |
+
+It answers `{ data: Task[], meta: { page, pageSize, total, totalPages } }`.
+
+**Errors** all share one shape from a single global exception filter: `{ statusCode, error, message, details? }`. `400` validation · `401` missing, expired or invalid token · `404` not found _or not yours_ · `409` email taken · `413` body over the gateway's JSON limit · `429` throttled · `500` unexpected · `503` an upstream service was unreachable or timed out.
 
 ## Key design decisions and trade-offs
 
