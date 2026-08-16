@@ -2,9 +2,7 @@ import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Request } from 'express';
 import { DomainError, ErrorCode, REFRESH_COOKIE } from '@tally/contracts';
-
-/** Methods that change nothing, so a cross-site one is not worth refusing. */
-const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+import { SAFE_METHODS } from './safe-methods';
 
 /**
  * Refuses a state-changing request that spends the refresh cookie on behalf of
