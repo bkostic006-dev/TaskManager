@@ -22,6 +22,12 @@ export enum ErrorCode {
    * per-field `details` to give and no smaller edit that fixes it.
    */
   PayloadTooLarge = 'PAYLOAD_TOO_LARGE',
+  /**
+   * The caller exceeded the rate limit the route allows. Raised only by the
+   * gateway's throttler guard — the services behind it are not rate limited,
+   * because nothing can reach them except the gateway that already was.
+   */
+  Throttled = 'THROTTLED',
   /** A downstream service was unreachable or exceeded its timeout budget. */
   Upstream = 'UPSTREAM_UNAVAILABLE',
   /** Anything unplanned. Carries no detail outward — never leak a stack. */
@@ -57,6 +63,7 @@ export const ERROR_STATUS: Record<ErrorCode, number> = {
   [ErrorCode.NotFound]: 404,
   [ErrorCode.Conflict]: 409,
   [ErrorCode.PayloadTooLarge]: 413,
+  [ErrorCode.Throttled]: 429,
   [ErrorCode.Internal]: 500,
   [ErrorCode.Upstream]: 503,
 };
