@@ -65,7 +65,7 @@ Gateway is the only public backend surface. It verifies the access JWT locally a
 ```
 apps/web · apps/gateway · apps/auth-service · apps/task-service
 packages/contracts        shared types, route constants, error codes, DEMO_USER_ID
-design/                   Tally design source — reference, not specification
+design/                   Tally design source — reference, not specification; gitignored, local only
 docs/                     BRIEF.md, PLAN.md
 docker-compose.yml · docker-compose.dev.yml · .env.example
 ```

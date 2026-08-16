@@ -4,7 +4,7 @@ Requirements: `docs/BRIEF.md` (source of truth). Plan and stages: `docs/PLAN.md`
 
 ## Layout
 
-`apps/web` (Next 15 · Mantine 8 · TanStack Query) · `apps/gateway` (NestJS, the only public surface) · `apps/auth-service` · `apps/task-service` (both NestJS + Prisma 6, no published ports) · `packages/contracts` (shared types, route constants, error codes) · `design/` (Tally design source).
+`apps/web` (Next 15 · Mantine 8 · TanStack Query) · `apps/gateway` (NestJS, the only public surface) · `apps/auth-service` · `apps/task-service` (both NestJS + Prisma 6, no published ports) · `packages/contracts` (shared types, route constants, error codes) · `design/` (Tally design source — local only, gitignored).
 
 ## Commands
 
@@ -64,6 +64,8 @@ Required on: every `contracts` export · service methods holding business logic 
 Skip thin controllers and self-evident private helpers. A comment restating the signature is worse than none. Write them with the code, never as a later sweep.
 
 ## Design
+
+`design/` is working material, not product: it is **gitignored and exists only on this machine**, so a fresh clone will not have it and nothing in `apps/` imports from it. The guidance below applies when it is present; when it is not, the tokens already in `apps/web` are the reference.
 
 `design/` is a **reference that removes decisions, not a specification to match.** Take colours, spacing, radii, shadows and fonts from `design/tokens.ts`; check `design/components.md` for which Mantine component builds an element; read the matching `design/mockups/*.html` before building a view, and reuse its copy — button labels, error messages, empty-state text.
 
