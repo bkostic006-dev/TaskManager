@@ -12,7 +12,7 @@ import { fieldError, isFormFailure } from '@/lib/form-errors';
 
 export default function LoginPage() {
   const router = useRouter();
-  const { isAuthenticated } = useSession();
+  const { isAuthenticated, unavailableReason } = useSession();
   const login = useLogin();
 
   const [email, setEmail] = useState('');
@@ -28,6 +28,9 @@ export default function LoginPage() {
 
   const error = login.error;
   const isCredentialFailure = error?.statusCode === 401;
+  // Shown only until the form has an answer of its own: boot's reason is the
+  // interesting one exactly while nothing has been submitted.
+  const showSessionNotice = error === null && unavailableReason !== null;
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -75,6 +78,12 @@ export default function LoginPage() {
       <Text c="ink.7" fz={13.5} mb="lg">
         Pick up where you left off.
       </Text>
+
+      {showSessionNotice && (
+        <Alert role="alert" mb="lg" title="We couldn't restore your session.">
+          {unavailableReason}
+        </Alert>
+      )}
 
       {error !== null && isFormFailure(error) && (
         <Alert

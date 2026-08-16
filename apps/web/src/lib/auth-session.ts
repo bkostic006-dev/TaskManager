@@ -22,11 +22,20 @@ export type SessionStatus =
   /** The refresh cookie is being spent right now. Gates must wait, not redirect. */
   | 'restoring'
   /** The question is answered: `user` is the truth. */
-  | 'ready';
+  | 'ready'
+  /**
+   * Boot asked and could not get an answer — throttled, gateway down, no
+   * network. Terminal, so gates stop waiting, but *not* "logged out": the
+   * cookie may still be perfectly good, and the login page says so rather than
+   * implying the visitor was never signed in.
+   */
+  | 'unavailable';
 
 export interface SessionSnapshot {
   user: AuthUser | null;
   status: SessionStatus;
+  /** The reason boot gave up, in the gateway's own words. `null` unless `unavailable`. */
+  unavailableReason: string | null;
 }
 
 /**
@@ -34,7 +43,11 @@ export interface SessionSnapshot {
  * render. One frozen object for both, because `useSyncExternalStore` compares
  * snapshots by identity and a fresh literal each call is an infinite loop.
  */
-const UNKNOWN_SNAPSHOT: SessionSnapshot = Object.freeze({ user: null, status: 'unknown' });
+const UNKNOWN_SNAPSHOT: SessionSnapshot = Object.freeze({
+  user: null,
+  status: 'unknown',
+  unavailableReason: null,
+});
 
 let accessToken: string | null = null;
 let snapshot: SessionSnapshot = UNKNOWN_SNAPSHOT;
@@ -70,17 +83,27 @@ export const authSession = {
   /** Adopts the result of a login, signup or refresh. */
   start(auth: AuthResponse): void {
     accessToken = auth.accessToken;
-    publish({ user: auth.user, status: 'ready' });
+    publish({ user: auth.user, status: 'ready', unavailableReason: null });
   },
 
   /**
    * Forgets everything and declares the question answered. Called on logout and
-   * whenever a refresh fails — a failed refresh is the only reliable signal
-   * that the browser's cookie is no longer worth anything.
+   * on a refresh rejected with `401` — the one answer that reliably means the
+   * browser's cookie is no longer worth anything.
    */
   clear(): void {
     accessToken = null;
-    publish({ user: null, status: 'ready' });
+    publish({ user: null, status: 'ready', unavailableReason: null });
+  },
+
+  /**
+   * Ends boot without a session because the refresh could not be *asked*, not
+   * because it was refused. Terminal like {@link clear}, so nothing waits on a
+   * spinner forever, but it keeps the reason so the login page can show it.
+   */
+  markUnavailable(reason: string): void {
+    accessToken = null;
+    publish({ user: null, status: 'unavailable', unavailableReason: reason });
   },
 
   /** Announces that boot is spending the cookie, so gates hold instead of redirecting. */
@@ -88,6 +111,6 @@ export const authSession = {
     if (snapshot.status !== 'unknown') {
       return;
     }
-    publish({ user: snapshot.user, status: 'restoring' });
+    publish({ user: snapshot.user, status: 'restoring', unavailableReason: null });
   },
 };

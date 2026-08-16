@@ -22,6 +22,8 @@ export interface Session {
   /** True until boot has finished asking the refresh cookie who this is. */
   isRestoring: boolean;
   status: SessionStatus;
+  /** Why boot ended without a session when the reason was not "you are logged out". */
+  unavailableReason: string | null;
 }
 
 /**
@@ -49,8 +51,11 @@ export function useSession(): Session {
   return {
     user: snapshot.user,
     isAuthenticated: snapshot.user !== null,
-    isRestoring: snapshot.status !== 'ready',
+    // `unavailable` is an answer, not a wait: gates that treated it as one would
+    // hold the spinner for the rest of the page's life.
+    isRestoring: snapshot.status === 'unknown' || snapshot.status === 'restoring',
     status: snapshot.status,
+    unavailableReason: snapshot.unavailableReason,
   };
 }
 

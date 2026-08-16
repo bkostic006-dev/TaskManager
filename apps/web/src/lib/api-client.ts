@@ -107,12 +107,17 @@ async function requestRefresh(): Promise<AuthResponse> {
     authSession.start(data);
     return data;
   } catch (cause) {
-    // A refresh that fails is the only trustworthy "you are logged out" signal
-    // the client gets. Clearing here rather than retrying is what stops the
-    // loop; the gateway deliberately answers `401` — not `404` — for a token
-    // whose account is gone, precisely so this branch is reached.
-    authSession.clear();
-    throw toApiRequestError(cause);
+    const failure = toApiRequestError(cause);
+    // Only a refusal means "you are logged out": the cookie is missing, expired
+    // or already rotated, and the gateway deliberately answers `401` — not
+    // `404` — for a token whose account is gone, precisely so this branch is
+    // reached. A `429`, a `5xx` or a dead network mean "ask again later", and
+    // clearing on those would let one client of a shared IP-tracked throttle
+    // bucket sign every other client out.
+    if (failure.statusCode === 401) {
+      authSession.clear();
+    }
+    throw failure;
   }
 }
 
@@ -121,7 +126,8 @@ async function requestRefresh(): Promise<AuthResponse> {
  * callers onto one request. See {@link refreshPromise} for why that matters.
  *
  * @throws ApiRequestError `401` when the cookie is missing, expired or already
- * rotated. The session is cleared before it throws.
+ * rotated; the session is cleared before it throws. Any other status leaves the
+ * session untouched — the credential may still be good.
  */
 export function refreshSession(): Promise<AuthResponse> {
   refreshPromise ??= requestRefresh().finally(() => {
@@ -153,8 +159,15 @@ export async function restoreSession(): Promise<void> {
 
   try {
     await refreshSession();
-  } catch {
-    // Already cleared by requestRefresh. Not being signed in is not a failure.
+  } catch (cause) {
+    // A `401` was already turned into a cleared session by `requestRefresh`, and
+    // not being signed in is not a failure. Every other failure left the store
+    // in `restoring`, and boot is the only thing that will ever answer it — so
+    // it has to reach a terminal state here or the app spins forever.
+    const failure = toApiRequestError(cause);
+    if (failure.statusCode !== 401) {
+      authSession.markUnavailable(failure.message);
+    }
   }
 }
 
@@ -180,7 +193,9 @@ apiClient.interceptors.response.use(
       await refreshSession();
     } catch {
       // Surface the original 401 rather than the refresh's: the caller asked
-      // about their request, and the session is already cleared.
+      // about their request. Mid-session the store is left as `requestRefresh`
+      // left it — cleared on a 401, untouched otherwise, so a throttled refresh
+      // costs one request instead of the session.
       throw toApiRequestError(cause);
     }
 
