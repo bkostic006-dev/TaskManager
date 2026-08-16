@@ -12,6 +12,7 @@ import {
 } from '@tally/contracts';
 import { CurrentUser, type RequestUser } from '../common/current-user.decorator';
 import { Public } from '../common/public.decorator';
+import { ThrottleAuthWrite } from '../common/throttle';
 import { AuthClient } from './auth.client';
 import { clearRefreshCookie, parseCookieSecure, setRefreshCookie } from './refresh-cookie';
 import { LoginDto } from './dto/login.dto';
@@ -37,7 +38,16 @@ export class AuthController {
     this.cookieSecure = parseCookieSecure(config.getOrThrow<string>('COOKIE_SECURE'));
   }
 
+  /**
+   * Creates an account. Rate limited strictly — see {@link RATE_LIMITS} — for a
+   * different reason than login: this route is how an unattended script farms
+   * accounts, and every one it creates is a row nobody asked for.
+   *
+   * @throws DomainError `Throttled` — `429` — past the limit, and `Conflict` —
+   * `409` — from the auth service if the email is taken.
+   */
   @Public()
+  @ThrottleAuthWrite()
   @Post('signup')
   async signup(
     @Body() body: SignupDto,
@@ -46,7 +56,21 @@ export class AuthController {
     return this.establish(await this.auth.signup(body), response);
   }
 
+  /**
+   * Exchanges credentials for a session. The strictest limit in the app — see
+   * {@link RATE_LIMITS} — because this is the one route where an attacker's
+   * request rate is their guess rate.
+   *
+   * The limit counts every attempt, not only the failures: counting failures
+   * alone would let an attacker holding one valid account reset the bucket
+   * whenever it filled.
+   *
+   * @throws DomainError `Throttled` — `429` — past the limit, and
+   * `Unauthorized` — `401` — for a wrong password or an unknown email, which
+   * are byte-identical answers.
+   */
   @Public()
+  @ThrottleAuthWrite()
   @Post('login')
   @HttpCode(200)
   async login(

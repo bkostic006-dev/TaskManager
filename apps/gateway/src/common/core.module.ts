@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import { HttpModule } from '@nestjs/axios';
 import { JwtModule } from '@nestjs/jwt';
+import { ThrottlerModule } from '@nestjs/throttler';
 import cookieParser from 'cookie-parser';
 import type { ValidationError } from 'class-validator';
 import {
@@ -18,6 +19,8 @@ import { AllExceptionsFilter } from './all-exceptions.filter';
 import { CookieOriginGuard } from './cookie-origin.guard';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { LoggingInterceptor } from './logging.interceptor';
+import { RATE_LIMITS } from './throttle';
+import { DomainThrottlerGuard } from './throttler.guard';
 import { UpstreamService } from './upstream.service';
 
 /**
@@ -77,6 +80,13 @@ import { UpstreamService } from './upstream.service';
         },
       }),
     }),
+    // In-memory storage, which is the module's default and is deliberate: a
+    // Redis-backed store is the answer for more than one replica and is named
+    // out of scope for this project. One unnamed throttler carrying the default
+    // allowance; the two routes that need a different one say so with
+    // `@Throttle()`, and each handler counts in its own bucket regardless — see
+    // `throttle.ts` for the whole policy and why it is not a single number.
+    ThrottlerModule.forRoot({ throttlers: [RATE_LIMITS.default] }),
   ],
   providers: [
     UpstreamService,
@@ -106,6 +116,14 @@ import { UpstreamService } from './upstream.service';
     },
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
     { provide: APP_INTERCEPTOR, useClass: LoggingInterceptor },
+    // First of the three guards, on purpose. Global guards run in registration
+    // order, so anything below this is reached only by a request that was
+    // already counted — which is what makes the limit cover the requests worth
+    // limiting. Behind the JWT guard it would count only *authenticated*
+    // traffic, and a flood of wrong passwords or forged tokens would be
+    // rejected without ever touching the counter, so the one thing the strict
+    // auth limit exists to stop would be exactly the thing it never saw.
+    { provide: APP_GUARD, useClass: DomainThrottlerGuard },
     // Global, and before the JWT guard: it applies to whatever spends the
     // refresh cookie, including routes that do not exist yet, so nothing has to
     // be remembered when the third one is written.
