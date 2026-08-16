@@ -9,7 +9,7 @@ import { PASSWORD_MIN_LENGTH } from '@tally/contracts';
 
 import { AuthShell } from '@/components/auth-shell';
 import { useSession, useSignup } from '@/hooks/use-auth';
-import { fieldError } from '@/lib/form-errors';
+import { fieldError, isFormFailure } from '@/lib/form-errors';
 
 /** The mockup's field-level copy for the one conflict this form can hit. */
 const EMAIL_TAKEN = 'That email is already registered. Log in instead, or use a different address.';
@@ -45,7 +45,9 @@ export default function SignupPage() {
           });
         },
         onError: (failure) => {
-          if (failure.statusCode !== 409 && failure.statusCode !== 400) {
+          // Either the form says it or the toast does. A throttled signup is not
+          // a problem with the name, email or password that was typed.
+          if (!isFormFailure(failure)) {
             notifications.show({
               color: 'brass',
               autoClose: false,
@@ -67,7 +69,7 @@ export default function SignupPage() {
         Two fields and you&rsquo;re counting.
       </Text>
 
-      {error !== null && !isEmailTaken && (
+      {error !== null && isFormFailure(error) && !isEmailTaken && (
         <Alert role="alert" mb="lg" title="Check the form below.">
           {error.message}
         </Alert>

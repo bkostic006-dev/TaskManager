@@ -8,7 +8,7 @@ import { notifications } from '@mantine/notifications';
 
 import { AuthShell } from '@/components/auth-shell';
 import { useLogin, useSession } from '@/hooks/use-auth';
-import { fieldError } from '@/lib/form-errors';
+import { fieldError, isFormFailure } from '@/lib/form-errors';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -42,10 +42,11 @@ export default function LoginPage() {
           });
         },
         onError: (failure) => {
-          // A credential or validation failure is stated in the form, where the
-          // fields that caused it are. Anything else — the gateway down, a
-          // timeout — has nothing to do with what was typed, so it gets a toast.
-          if (failure.statusCode !== 401 && failure.statusCode !== 400) {
+          // A verdict on what was typed is stated in the form, where the fields
+          // that caused it are. Anything else — throttling, the gateway down, a
+          // timeout — has nothing to do with the form, so it gets a toast. One
+          // or the other, never both.
+          if (!isFormFailure(failure)) {
             notifications.show({
               color: 'brass',
               autoClose: false,
@@ -75,7 +76,7 @@ export default function LoginPage() {
         Pick up where you left off.
       </Text>
 
-      {error !== null && (
+      {error !== null && isFormFailure(error) && (
         <Alert
           role="alert"
           mb="lg"
