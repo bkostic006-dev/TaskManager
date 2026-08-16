@@ -525,6 +525,8 @@ Each stage ends in something runnable and gets reviewed before the next begins.
       two different users issuing the identical query string get different rows** — a cache-hit
       log line proves the cache works, not that it is safe.
 - [ ] **8 · Ship** — README, fresh-clone test on a clean machine, invite reviewers.
+      **The invitations are the user's, by their own call — do not send them, and do not ask
+      again.** What follows is the checklist for when they do it, not a task to pick up.
       **Do not send-and-assume.** The repo is private, so access depends on an invitation
       being accepted. `MFarrugiaCatena` is verified to exist and is Matthew Farrugia. Ricardo
       is given only as an email — GitHub can invite by address, but silently does nothing if
