@@ -18,7 +18,7 @@ Reviewers to invite at the end: `MFarrugiaCatena` (matthew.farrugia@catenamedia.
 | Frontend   | Next 15 · React 19 · **Mantine 8** · TanStack Query 5                                                     | Mantine 8 is what `design/tokens.ts` was authored against — it drops in unmodified                                                                    |
 | Auth       | Access JWT 15 min (HS256, in memory) + opaque refresh 7 d (httpOnly cookie, SHA-256 hashed), **rotation** | Rotation is the brief's only "must"                                                                                                                   |
 | Validation | class-validator + global `ValidationPipe` (`whitelist`, `forbidNonWhitelisted`, `transform`)              | Explicit brief requirement                                                                                                                            |
-| Tests      | After each stage, on logic that branches. ~25 total                                                       | The brief never mentions testing; a proportionate suite is a professional-standards signal, not a discipline framework                                |
+| Tests      | After each stage, on logic that branches. 69 as of stage 7 (planned ~25)                                  | The brief never mentions testing; a proportionate suite is a professional-standards signal, not a discipline framework                                |
 
 ### Versioning
 
