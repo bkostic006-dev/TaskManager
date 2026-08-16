@@ -1,6 +1,7 @@
 import { INestApplication } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
+import { getOptionsToken } from '@nestjs/throttler';
 import express from 'express';
 import request from 'supertest';
 import {
@@ -51,6 +52,16 @@ describe('Gateway auth', () => {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(AuthClient)
       .useValue(authClient)
+      // The throttler stays wired — the guard still runs — but is told to skip
+      // every request. This suite makes five login attempts against a route
+      // whose real allowance is five per minute, so it was sitting exactly on
+      // the limit: a sixth login test added later would fail with a `429` and
+      // read as an auth bug. `skipIf` is checked before the per-handler
+      // `@Throttle()` metadata, so it lifts the strict limit too, which
+      // overriding the module's throttler list alone would not.
+      // Rate limiting is asserted in `throttle.e2e-spec.ts`, on purpose.
+      .overrideProvider(getOptionsToken())
+      .useValue({ throttlers: [{ ttl: 60_000, limit: 1 }], skipIf: () => true })
       .compile();
 
     // Mirrors `main.ts`, and has to be restated because the body parser is an
