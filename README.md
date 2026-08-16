@@ -4,7 +4,7 @@ A SaaS-style task manager — sign up, log in, and manage a personal task list w
 
 ## Quick start
 
-**Docker is the only prerequisite.** No Node, no pnpm, no PostgreSQL, and no `.env` step — every dependency is installed and every build runs inside the images.
+**Docker is the only prerequisite for running the app.** No Node, no pnpm, no PostgreSQL, and no `.env` step — every dependency is installed and every build runs inside the images. (Node and pnpm are needed only to run the test suite from the host; see [Tests](#tests).)
 
 ```bash
 git clone git@github.com:bkostic006-dev/TaskManager.git
@@ -91,6 +91,21 @@ Completion is a domain action rather than a field edit, which is why `/complete`
 It answers `{ data: Task[], meta: { page, pageSize, total, totalPages } }`.
 
 **Errors** all share one shape from a single global exception filter: `{ statusCode, error, message, details? }`. `400` validation · `401` missing, expired or invalid token · `404` not found _or not yours_ · `409` email taken · `413` body over the gateway's JSON limit · `429` throttled · `500` unexpected · `503` an upstream service was unreachable or timed out.
+
+## Tests
+
+69 tests across 14 spec files, split between unit specs beside the code they cover (`src/**/*.spec.ts`) and end-to-end specs driving a booted Nest app with mocked upstreams (`apps/*/test/*.e2e-spec.ts` — worth naming, because a glob for `*.spec.ts` alone finds only 39 of them).
+
+They cover the logic that genuinely branches: refresh-token rotation and its compare-and-swap under concurrency, the list query builder, completion transitions, the gateway's status codes and validation rules, the task-list cache keyed per user, throttling, and the web client's single-flight refresh coordinator. There are deliberately no UI snapshots, CSS regression tests, or exhaustive validator permutations.
+
+**Node 22+ and pnpm are needed for this and only this** — running the app still needs nothing but Docker.
+
+```bash
+pnpm install
+pnpm test
+```
+
+Individual packages: `pnpm --filter @tally/gateway test` (likewise `@tally/auth-service`, `@tally/task-service`, `@tally/web`). No database is required — the e2e specs mock the service clients.
 
 ## Key design decisions and trade-offs
 
