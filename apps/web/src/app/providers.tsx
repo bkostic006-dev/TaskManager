@@ -27,6 +27,21 @@ export function Providers({ children }: { children: React.ReactNode }) {
             retry: false,
             refetchOnWindowFocus: false,
           },
+          mutations: {
+            // TanStack's default `networkMode: 'online'` *pauses* a mutation
+            // when the browser reports itself offline, rather than failing it.
+            // Ticking a checkbox offline then produced nothing at all — no
+            // toast, no error, no visible change — and every paused mutation
+            // fired at once on reconnect. The brief asks for feedback that
+            // informs the user "of actions or errors", and silence is neither.
+            //
+            // `'always'` lets the request go out and fail like any other
+            // failure, so the error toast these hooks already show is what the
+            // user gets. Queueing would be defensible; queueing *silently* is
+            // the defect. Reads keep the default: a paused refetch leaves the
+            // last page on screen, which is the right answer for a read.
+            networkMode: 'always',
+          },
         },
       }),
   );
@@ -34,7 +49,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       <MantineProvider theme={theme}>
-        <Notifications position="top-right" limit={3} />
+        {/* Bottom-right is the design source's placement: a toast at the top
+            covers the app header, which is where the account and the way out
+            live. Mantine renders one container per position regardless, so this
+            prop only chooses which of them receives a notification. */}
+        <Notifications position="bottom-right" limit={3} />
         {children}
       </MantineProvider>
     </QueryClientProvider>
