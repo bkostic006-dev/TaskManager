@@ -4,7 +4,7 @@ Requirements: `docs/BRIEF.md` (source of truth). Plan and stages: `docs/PLAN.md`
 
 ## Layout
 
-`apps/web` (Next 15 · Mantine 8 · TanStack Query) · `apps/gateway` (NestJS, the only public surface) · `apps/auth-service` · `apps/task-service` (both NestJS + Prisma 6, no published ports) · `packages/contracts` (shared types, route constants, error codes) · `design/` (Tally design source — local only, gitignored).
+`apps/web` (Next 15 · Mantine 8 · TanStack Query) · `apps/gateway` (NestJS, the only public surface) · `apps/auth-service` · `apps/task-service` (both NestJS + Prisma 6, no published ports) · `packages/contracts` (shared types, route constants, error codes) · `design/` (Tally design source — committed as reference, never imported).
 
 ## Commands
 
@@ -65,7 +65,7 @@ Skip thin controllers and self-evident private helpers. A comment restating the 
 
 ## Design
 
-`design/` is working material, not product: it is **gitignored and exists only on this machine**, so a fresh clone will not have it and nothing in `apps/` imports from it. The guidance below applies when it is present; when it is not, the tokens already in `apps/web` are the reference.
+`design/` is working material, not product. It **is committed** — that was reversed at stage 8, on the repo owner's call, so a reviewer can see what the UI was built against — but **nothing in `apps/` imports from it**, and that must stay true. It is a reference that removes decisions, not a specification the code is bound to.
 
 `design/` is a **reference that removes decisions, not a specification to match.** Take colours, spacing, radii, shadows and fonts from `design/tokens.ts`; check `design/components.md` for which Mantine component builds an element; read the matching `design/mockups/*.html` before building a view, and reuse its copy — button labels, error messages, empty-state text.
 

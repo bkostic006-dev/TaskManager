@@ -21,11 +21,12 @@ coverage/
 .env.*
 !.env.example
 
-# Design working material, not product: 4,329 lines of tokens, mockups and
-# exported prototype artifacts that the app never imports. Kept on disk because
-# CLAUDE.md's Design section builds UI from it; out of the repo because shipping
-# it makes the deliverable look larger than the thing being reviewed.
-design/
+# `design/` is deliberately NOT ignored. It was excluded at first, on the
+# reasoning that shipping working material makes the deliverable look larger
+# than the thing being reviewed — but it is the source the UI was built from,
+# and a reviewer seeing the tokens and mockups can tell a considered interface
+# from an accidental one. Committed on the repo owner's call; the README says
+# what it is and how it was produced.
 
 # editor / OS
 .DS_Store
