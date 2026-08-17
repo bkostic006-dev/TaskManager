@@ -28,9 +28,26 @@ export default function LoginPage() {
 
   const error = login.error;
   const isCredentialFailure = error?.statusCode === 401;
+
   // Shown only until the form has an answer of its own: boot's reason is the
   // interesting one exactly while nothing has been submitted.
   const showSessionNotice = error === null && unavailableReason !== null;
+
+  /**
+   * Drops the previous submit's verdict as soon as the user edits anything.
+   *
+   * Both the banner and the per-field messages read `login.error`, which is the
+   * mutation's error and lives until the *next* submit resolves. Without this,
+   * mistyping a password and correcting it leaves the field red and the banner
+   * up — the form still showing the answer to a question that was asked about
+   * different input. Guarded on `error !== null` so ordinary typing is not a
+   * state update per keystroke.
+   */
+  function clearStaleFailure(): void {
+    if (login.error !== null) {
+      login.reset();
+    }
+  }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -105,7 +122,10 @@ export default function LoginPage() {
             autoComplete="email"
             placeholder="you@company.com"
             value={email}
-            onChange={(event) => setEmail(event.currentTarget.value)}
+            onChange={(event) => {
+              setEmail(event.currentTarget.value);
+              clearStaleFailure();
+            }}
             error={fieldError(error, 'email')}
             disabled={login.isPending}
             required
@@ -117,7 +137,10 @@ export default function LoginPage() {
             autoComplete="current-password"
             placeholder="••••••••••"
             value={password}
-            onChange={(event) => setPassword(event.currentTarget.value)}
+            onChange={(event) => {
+              setPassword(event.currentTarget.value);
+              clearStaleFailure();
+            }}
             error={fieldError(error, 'password')}
             disabled={login.isPending}
             required

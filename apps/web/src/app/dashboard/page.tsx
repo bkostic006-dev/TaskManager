@@ -92,6 +92,19 @@ function Dashboard() {
   const saving = createTask.isPending || updateTask.isPending;
   const saveError = drawerTask === null ? createTask.error : updateTask.error;
 
+  /**
+   * Drops a save failure the moment the user edits the form again.
+   *
+   * The drawer already resets its fields when it *opens*, which covers moving
+   * between tasks — but a `400` raised on the open drawer stayed under the
+   * field until the next save resolved, so correcting the title left it red.
+   * Both mutations are reset because either could own the visible failure.
+   */
+  function clearSaveFailure(): void {
+    createTask.reset();
+    updateTask.reset();
+  }
+
   function change(next: Partial<typeof DEFAULT_TASK_LIST_PARAMS>) {
     setParams((current) => applyTaskListChange(current, next));
   }
@@ -261,6 +274,7 @@ function Dashboard() {
         numeral={drawerNumeral}
         saving={saving}
         error={saveError}
+        onEdit={clearSaveFailure}
         onClose={() => setDrawerOpen(false)}
         onSubmit={handleSubmit}
         onDelete={setPendingDelete}
