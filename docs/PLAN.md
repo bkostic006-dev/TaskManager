@@ -524,7 +524,37 @@ Each stage ends in something runnable and gets reviewed before the next begins.
       cache inside the task service where the query already carries the user. **Needs a test that
       two different users issuing the identical query string get different rows** — a cache-hit
       log line proves the cache works, not that it is safe.
-- [ ] **8 · Ship** — README, fresh-clone test on a clean machine, invite reviewers.
+- [x] **8 · Ship** — README, fresh-clone test on a clean machine, invite reviewers.
+      **Everything except the invitations is done.** Those are the user's, by their own call.
+      _D4 fixed_ — submit failures were sticky on all three forms, which the QA pass called the
+      one defect a reviewer hits by accident. Login and signup reset their own mutation on edit;
+      the drawer takes an `onEdit` callback because the dashboard owns its error.
+      _D7 fixed rather than documented_ — offline mutations paused silently, producing no toast,
+      no error and no visible change. The brief requires feedback that informs the user "of
+      actions or errors", and silence is neither, so `mutations: { networkMode: 'always' }` turns
+      the pause into a real failure the existing error toast already handles. Reads keep the
+      default: a paused refetch leaves the last page on screen, which is right for a read.
+      _README finished_ — the three brief-mandated sections plus a dashboard screenshot and a
+      360px companion, both captured from the running stack against pristine seed data. Adds why
+      there are three rate limits and not one, why the cache key starts with `userId`, the
+      versioning decision, and the limitations a reviewer cannot infer from the code. Corrected
+      the rotation claim from eight simultaneous refreshes to the twenty actually measured.
+      _First real browser evidence this project has had._ Headless Chrome driven over the
+      DevTools Protocol using Node's built-in WebSocket — no driver dependency added. It closed
+      four items stages 5 and 6 could only reason about: `/` bounces to `/login` while signed
+      out; typed credentials land on `/dashboard` showing "Showing 1–8 of 47"; **a hard reload
+      keeps the session**, which was the F5 gesture never previously observed; and **zero console
+      errors** across the run.
+      _Fresh-clone test:_ cloned to a clean directory on another partition, `docker compose up
+      --build` → **5/5 healthy in 118s with no `.env` step**, then login `200`, page 1 vs page 2
+      returning different rows, filters 16/31 against the seed, search, sort, `pageSize=7` `400`,
+      no token `401`, and the full browser run again against that stack. Torn down afterwards.
+      **The non-owner half of that test could not be run and is not claimed:** the repo is
+      private and no invitation has been accepted, so no non-owner account has access. That is
+      the same fact the invitation step verifies.
+      _Final gate:_ `pnpm lint`, `pnpm -r typecheck` 5/5, **81 tests** green, cold
+      `down -v && up --build` → 5/5 healthy, login `200`. Working tree clean, all pushed.
+      **Still open — the user's to do:** send the two invitations and confirm both are pending.
       **The invitations are the user's, by their own call — do not send them, and do not ask
       again.** What follows is the checklist for when they do it, not a task to pick up.
       **Do not send-and-assume.** The repo is private, so access depends on an invitation
@@ -606,7 +636,7 @@ orphaned requirement obvious. Re-audited with fresh eyes at stages 4 and 8.
 | Bonus: rate limiting and caching                             | 7 ✓       |
 | Bonus: RxJS for service comms / retry                        | 3 ✓ · 7 ✓ |
 | README: run locally · trade-offs · limitations               | 1 ✓ · 8   |
-| GitHub repo + access for both reviewers                      | 8         |
+| GitHub repo + access for both reviewers                      | 8 — repo done, invitations are the user's |
 | Clear and meaningful commit history                          | ongoing   |
 
 ## README (required sections)
