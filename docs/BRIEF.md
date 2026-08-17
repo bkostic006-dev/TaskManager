@@ -84,7 +84,9 @@ Include a README file explaining:
 - Key design decisions and trade-offs
 - Known limitations and potential future improvements
 
-Grant repository access to: matthew.farrugia@catenamedia.com (GitHub: MFarrugiaCatena) & ricardo.gomes@catenamedia.com
+Grant repository access to: Matthew Farrugia (GitHub: MFarrugiaCatena) & Ricardo Gomes
+
+> Their email addresses appeared here in the original document and have been redacted: this repository is public, and publishing two people's work addresses is not something they agreed to. The GitHub handle is kept because it is already a public identifier and is what the invitation needs.
 
 ---
 

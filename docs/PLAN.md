@@ -3,7 +3,7 @@
 Requirements source of truth: [BRIEF.md](BRIEF.md). Where this document conflicts with the brief, the brief wins.
 
 **Product name:** Tally. **Repo:** `git@github.com:bkostic006-dev/TaskManager.git`.
-Reviewers to invite at the end: `MFarrugiaCatena` (matthew.farrugia@catenamedia.com) and ricardo.gomes@catenamedia.com.
+Reviewers to invite at the end: `MFarrugiaCatena` and Ricardo Gomes (address held outside the repo — it is public, see the note in BRIEF.md).
 
 ## Decisions
 
@@ -351,7 +351,7 @@ Each stage ends in something runnable and gets reviewed before the next begins.
       survives the double-invoked boot refresh.
 - [x] **6 · Frontend tasks** — dashboard, create/edit/delete/complete, pagination, filter, sort,
       search, loading states, toasts, responsive. — `0d53269` … `e363be5`
-      **Checkpoint closed by the browser QA pass** (`docs/QA-HANDOFF.md`, `QA-PLAN.md`): 26 areas,
+      **Checkpoint closed by the browser QA pass**: 26 areas,
       20 pass, 2 partial, 4 waived or untestable with the available tooling, and the brief's four
       frontend requirements all closed. Five defects were fixed during the pass and four more
       raised; all four of those are now fixed too — D1 (no custom 404), D2 (copy), D3 (toast
