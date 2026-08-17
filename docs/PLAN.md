@@ -349,9 +349,21 @@ Each stage ends in something runnable and gets reviewed before the next begins.
       _Checkpoint:_ log in in the browser; survives a hard refresh, and no component calls
       `fetch`/axios directly. Also load the app with StrictMode on and confirm the session
       survives the double-invoked boot refresh.
-- [ ] **6 · Frontend tasks** — dashboard, create/edit/delete/complete, pagination, filter, sort,
-      search, loading states, toasts, responsive. — **CODE COMPLETE, CHECKPOINT OPEN.**
-      `0d53269` … `e363be5`
+- [x] **6 · Frontend tasks** — dashboard, create/edit/delete/complete, pagination, filter, sort,
+      search, loading states, toasts, responsive. — `0d53269` … `e363be5`
+      **Checkpoint closed by the browser QA pass** (`docs/QA-HANDOFF.md`, `QA-PLAN.md`): 26 areas,
+      20 pass, 2 partial, 4 waived or untestable with the available tooling, and the brief's four
+      frontend requirements all closed. Five defects were fixed during the pass and four more
+      raised; all four of those are now fixed too — D1 (no custom 404), D2 (copy), D3 (toast
+      placement) and D4 (sticky form errors) landed in stage 8.
+      _Independently re-observed afterwards by the orchestrator_, driving headless Chrome over
+      the DevTools Protocol: the dashboard renders 8 rows and "Showing 1–8 of 47", the login
+      toast appears ("Welcome back, Dana"), a hard reload keeps the session, the layout is real
+      at 1280 / 768 / 360 — screenshots in `docs/screenshots/` — and the run produced **zero
+      console errors**. Loading indicators are the one of the four I did not observe myself; the
+      QA pass closed that one and I am relying on it rather than restating it as mine.
+      _The note below is what this entry said before the QA pass ran; kept because it records why
+      the box stayed unticked for so long._
       The implementing agent was cut off by a session limit at the moment it began browser
       verification, so the code exists and the checkpoint does not. Left unticked deliberately:
       this stage's checkpoint is a browser, and nothing here has met one.
@@ -631,7 +643,7 @@ orphaned requirement obvious. Re-audited with fresh eyes at stages 4 and 8.
 | Sorting by date and completion status                        | 4 ✓ · 6   |
 | Task service reachable only via the gateway, authenticated   | 1 ✓ · 4 ✓ |
 | API abstracted behind reusable hooks or service functions    | 5 ✓       |
-| Fully responsive · loading indicators · toasts               | 6         |
+| Fully responsive · loading indicators · toasts               | 6 ✓       |
 | Clean architecture across services                           | 3 ✓ · 4 ✓ |
 | Bonus: rate limiting and caching                             | 7 ✓       |
 | Bonus: RxJS for service comms / retry                        | 3 ✓ · 7 ✓ |
