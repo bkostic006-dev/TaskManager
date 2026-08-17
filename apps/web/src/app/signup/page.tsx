@@ -30,6 +30,18 @@ export default function SignupPage() {
   }, [isAuthenticated, router]);
 
   const error = signup.error;
+
+  /**
+   * Drops the previous submit's verdict as soon as the user edits anything.
+   * The banner and the per-field messages both read `signup.error`, which lives
+   * until the next submit resolves — so without this, fixing the field the
+   * server complained about leaves it red and the banner up.
+   */
+  function clearStaleFailure(): void {
+    if (signup.error !== null) {
+      signup.reset();
+    }
+  }
   const isEmailTaken = error?.statusCode === 409;
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -66,7 +78,7 @@ export default function SignupPage() {
         Create your account
       </Title>
       <Text c="ink.7" fz={13.5} mb="lg">
-        Two fields and you&rsquo;re counting.
+        Three fields and you&rsquo;re counting.
       </Text>
 
       {error !== null && isFormFailure(error) && !isEmailTaken && (
@@ -81,7 +93,10 @@ export default function SignupPage() {
             label="Your name"
             autoComplete="name"
             value={name}
-            onChange={(event) => setName(event.currentTarget.value)}
+            onChange={(event) => {
+              setName(event.currentTarget.value);
+              clearStaleFailure();
+            }}
             error={fieldError(error, 'name')}
             disabled={signup.isPending}
             autoFocus
@@ -95,7 +110,10 @@ export default function SignupPage() {
             autoComplete="email"
             placeholder="you@company.com"
             value={email}
-            onChange={(event) => setEmail(event.currentTarget.value)}
+            onChange={(event) => {
+              setEmail(event.currentTarget.value);
+              clearStaleFailure();
+            }}
             error={isEmailTaken ? EMAIL_TAKEN : fieldError(error, 'email')}
             disabled={signup.isPending}
             required
@@ -108,7 +126,10 @@ export default function SignupPage() {
             placeholder="••••••••••"
             description={`At least ${PASSWORD_MIN_LENGTH} characters.`}
             value={password}
-            onChange={(event) => setPassword(event.currentTarget.value)}
+            onChange={(event) => {
+              setPassword(event.currentTarget.value);
+              clearStaleFailure();
+            }}
             error={fieldError(error, 'password')}
             disabled={signup.isPending}
             required
