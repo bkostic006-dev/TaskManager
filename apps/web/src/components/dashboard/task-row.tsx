@@ -3,7 +3,7 @@
 import { ActionIcon, Badge, Box, Checkbox, Group, Paper, Text, Tooltip } from '@mantine/core';
 import type { Task } from '@tally/contracts';
 
-import { IconCheck, IconPencil, IconTrash } from './icons';
+import { IconPencil, IconTrash } from './icons';
 import classes from './task-row.module.css';
 
 /** "Aug 4" — the meta line's only variable part. */
@@ -28,8 +28,16 @@ export interface TaskRowProps {
  * One task, as the row the numeral spine opens.
  *
  * Completion is stated in three non-colour channels before colour does any
- * work: the numeral becomes a filled ink marker, the title is struck through,
- * and the badge reads "Done".
+ * work: the numeral is struck through, the title is struck through, and the
+ * badge reads "Done".
+ *
+ * The numeral **stays** on a completed row rather than being replaced by a
+ * check glyph. Two reasons: the checkbox beside it already carries a tick, so a
+ * marker says the same thing twice; and the numeral spine is the product's
+ * organising idea — a row that surrenders its number stops being part of the
+ * tally at exactly the point it should read as counted. Crossing the number off
+ * is what a paper list does. This is a deliberate departure from
+ * `design/tokens.ts`'s `completedMarker`.
  */
 export function TaskRow({ task, numeral, busy, onToggle, onEdit, onDelete }: TaskRowProps) {
   return (
@@ -38,15 +46,12 @@ export function TaskRow({ task, numeral, busy, onToggle, onEdit, onDelete }: Tas
       className={`${classes.row} ${task.completed ? classes.done : ''}`}
       aria-busy={busy || undefined}
     >
-      {task.completed ? (
-        <Box className={classes.marker} aria-hidden>
-          <IconCheck size={17} />
-        </Box>
-      ) : (
-        <Box className={classes.numeral} aria-hidden>
-          {numeral}
-        </Box>
-      )}
+      <Box
+        className={`${classes.numeral} ${task.completed ? classes.numeralDone : ''}`}
+        aria-hidden
+      >
+        {numeral}
+      </Box>
 
       <Checkbox
         className={classes.checkbox}

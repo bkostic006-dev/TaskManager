@@ -32,6 +32,9 @@
   color: var(--mantine-color-ink-9);
 }
 
+/* `justify-self` rather than relying on `text-align` alone: it shrinks the box
+   to the digits, which is what lets the completed stroke above span the number
+   instead of the whole 44px column. Right edge is identical either way. */
 .numeral {
   font-family: var(--mantine-font-family-headings);
   font-weight: 600;
@@ -39,23 +42,42 @@
   line-height: 1;
   font-variant-numeric: tabular-nums;
   color: var(--mantine-color-ink-6);
+  justify-self: end;
   text-align: right;
   transition: color 120ms ease;
   user-select: none;
 }
 
-/* Completion replaces the glyph — ink, never the accent, so "done" never reads
-   as "clickable". Same cell, so the left edge does not ripple. */
-.marker {
-  justify-self: end;
-  width: 28px;
-  height: 28px;
-  border-radius: var(--mantine-radius-sm);
+/* Completion crosses the number off rather than replacing it.
+ *
+ * The digits keep the pending colour: completed rows are meant to recede, and
+ * pending numerals are already pale, so darkening would invert the hierarchy and
+ * lightening would make them illegible. The *line* carries the statement instead
+ * — full ink at 2px, so the cross-out is the pronounced element while the
+ * numeral itself stays exactly as loud as it was. Ink, never the accent, so
+ * "done" never reads as "clickable".
+ *
+ * Diagonal, and drawn as a pseudo-element rather than `text-decoration:
+ * line-through`, because a horizontal rule lands on the crossbar of a 4 and the
+ * waist of a 7 and makes both hard to read at a glance. An angled stroke crosses
+ * far fewer horizontal strokes, and it is what crossing an item off a paper list
+ * actually looks like. `text-decoration` cannot be angled, hence the ::after. */
+.numeralDone {
+  position: relative;
+}
+
+.numeralDone::after {
+  content: '';
+  position: absolute;
+  /* Slight overhang past the digits so it reads as a stroke over the number
+     rather than an underline sized to it. */
+  left: -3px;
+  right: -3px;
+  top: calc(50% - 1px);
+  height: 2px;
+  border-radius: 1px;
   background: var(--mantine-color-ink-9);
-  color: var(--mantine-color-ink-0);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  transform: rotate(-20deg);
 }
 
 .trailing {
@@ -93,15 +115,9 @@
     padding: 10px 12px;
   }
 
-  .numeral,
-  .marker {
+  .numeral {
     font-size: 26px;
     margin-top: 2px;
-  }
-
-  .marker {
-    width: 26px;
-    height: 26px;
   }
 
   .checkbox {

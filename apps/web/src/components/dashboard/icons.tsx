@@ -44,14 +44,6 @@ export function IconPlus({ size }: { size?: number }) {
   );
 }
 
-export function IconCheck({ size }: { size?: number }) {
-  return (
-    <Glyph size={size}>
-      <path d="m5 12.5 4.5 4.5L19 7" />
-    </Glyph>
-  );
-}
-
 export function IconSort({ size }: { size?: number }) {
   return (
     <Glyph size={size}>

@@ -19,6 +19,12 @@ export interface TaskDrawerProps {
   saving: boolean;
   /** The last save failure, so a `400` can be shown under the field that caused it. */
   error: ApiRequestError | null;
+  /**
+   * Clears the last save failure. Called on the first edit after one, so a
+   * `400` the server raised about the old value does not stay under a field the
+   * user has since corrected.
+   */
+  onEdit: () => void;
   onClose: () => void;
   onSubmit: (values: { title: string; description: string }) => void;
   onDelete: (task: Task) => void;
@@ -41,6 +47,7 @@ export function TaskDrawer({
   numeral,
   saving,
   error,
+  onEdit,
   onClose,
   onSubmit,
   onDelete,
@@ -107,7 +114,12 @@ export function TaskDrawer({
             maxLength={TASK_TITLE_MAX_LENGTH}
             placeholder="What needs doing?"
             value={title}
-            onChange={(event) => setTitle(event.currentTarget.value)}
+            onChange={(event) => {
+              setTitle(event.currentTarget.value);
+              if (error !== null) {
+                onEdit();
+              }
+            }}
             onBlur={() => setTouched(true)}
             error={titleError}
             disabled={saving}
@@ -120,7 +132,12 @@ export function TaskDrawer({
             maxLength={TASK_DESCRIPTION_MAX_LENGTH}
             placeholder="Anything you'll want to remember later."
             value={description}
-            onChange={(event) => setDescription(event.currentTarget.value)}
+            onChange={(event) => {
+              setDescription(event.currentTarget.value);
+              if (error !== null) {
+                onEdit();
+              }
+            }}
             error={fieldError(error, 'description')}
             disabled={saving}
           />
