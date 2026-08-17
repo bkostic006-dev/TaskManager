@@ -22,15 +22,15 @@ Reviewers to invite at the end: `MFarrugiaCatena` (matthew.farrugia@catenamedia.
 
 ### Versioning
 
-Checked 2026-08-15. We are behind current on three majors, deliberately:
+Re-checked 2026-08-17 against the installed tree, not the manifest ranges. Behind current on three majors, deliberately, and one minor:
 
 | Package                 | Ours     | Current  | Call                                                                    |
 | ----------------------- | -------- | -------- | ----------------------------------------------------------------------- |
 | `prisma` / `@prisma/client` | 6.19.3   | 7.9.1    | **Stay.** Revisit only as a README future-improvement                   |
 | `next`                  | 15.5.23  | 16.3.1   | **Stay.** No brief requirement, and the Docker build is working         |
 | `@mantine/core`         | 8.3.18   | 9.5.1    | **Stay.** `design/tokens.ts` was authored against 8 and drops in unmodified |
-| `@nestjs/core`          | 11.x     | 11.2.1   | Current already                                                         |
-| `@tanstack/react-query` | 5.x      | 5.101.4  | Current major already                                                   |
+| `@nestjs/core`          | 11.1.29  | 11.2.1   | Same major, one minor behind — the lockfile pins it. Not upgraded       |
+| `@tanstack/react-query` | 5.101.4  | 5.101.4  | Exactly current                                                         |
 
 The brief is explicit that library versions are **unspecified** and that nothing requires latest
 majors. An earlier planning pass chose four bleeding-edge majors for a rubric nobody had read,
