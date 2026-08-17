@@ -64,19 +64,6 @@ export function useTaskList(
   });
 }
 
-/** Raises the toast for a failure the form cannot show inline. */
-function notifyFailure(title: string, failure: ApiRequestError): void {
-  if (failure.statusCode === 400) {
-    return;
-  }
-  notifications.show({
-    color: 'brass',
-    autoClose: false,
-    title,
-    message: failure.message,
-  });
-}
-
 /** Every mutation invalidates the whole task tree — totals move, not just rows. */
 function useInvalidateTasks(): () => void {
   const queryClient = useQueryClient();
@@ -85,9 +72,46 @@ function useInvalidateTasks(): () => void {
   };
 }
 
+/**
+ * Raises the toast for a failure the form cannot show inline, and re-syncs the
+ * list when the server says the row is gone.
+ *
+ * **A `404` also invalidates**, and that is the whole reason this is a hook. The
+ * task was deleted since this tab last read the list — another tab, another
+ * device — so every row this tab is showing may be stale. Toasting alone leaves
+ * the dead row on screen underneath a message reading "That task no longer
+ * exists.", which is the app contradicting itself, and the user's only way out
+ * is a manual reload. Invalidating drops the row on the refetch, so the toast
+ * and the list agree.
+ *
+ * Deliberately narrowed to `404`: a `503` or a dead network says nothing about
+ * whether the row still exists, and refetching on those would only fail again.
+ */
+function useNotifyFailure(): (title: string, failure: ApiRequestError) => void {
+  const invalidate = useInvalidateTasks();
+
+  return (title, failure) => {
+    if (failure.statusCode === 404) {
+      invalidate();
+    }
+    // A `400` names a field, and the drawer renders it under that field where it
+    // can be fixed. A toast would point at the wrong place.
+    if (failure.statusCode === 400) {
+      return;
+    }
+    notifications.show({
+      color: 'brass',
+      autoClose: false,
+      title,
+      message: failure.message,
+    });
+  };
+}
+
 /** Creates a task. Toasts "Task created", mirroring the drawer's Save task button. */
 export function useCreateTask(): UseMutationResult<Task, ApiRequestError, CreateTaskInput> {
   const invalidate = useInvalidateTasks();
+  const notifyFailure = useNotifyFailure();
 
   return useMutation<Task, ApiRequestError, CreateTaskInput>({
     mutationFn: tasksApi.createTask,
@@ -110,6 +134,7 @@ export function useUpdateTask(): UseMutationResult<
   { id: string; input: UpdateTaskInput }
 > {
   const invalidate = useInvalidateTasks();
+  const notifyFailure = useNotifyFailure();
 
   return useMutation<Task, ApiRequestError, { id: string; input: UpdateTaskInput }>({
     mutationFn: ({ id, input }) => tasksApi.updateTask(id, input),
@@ -128,6 +153,7 @@ export function useUpdateTask(): UseMutationResult<
 /** Deletes a task. The confirmation modal is the guard; this is the effect. */
 export function useDeleteTask(): UseMutationResult<void, ApiRequestError, Task> {
   const invalidate = useInvalidateTasks();
+  const notifyFailure = useNotifyFailure();
 
   return useMutation<void, ApiRequestError, Task>({
     mutationFn: (task) => tasksApi.deleteTask(task.id),
@@ -155,6 +181,7 @@ export function useSetTaskCompletion(): UseMutationResult<
   { task: Task; completed: boolean }
 > {
   const invalidate = useInvalidateTasks();
+  const notifyFailure = useNotifyFailure();
 
   return useMutation<Task, ApiRequestError, { task: Task; completed: boolean }>({
     mutationFn: ({ task, completed }) => tasksApi.setTaskCompletion(task.id, completed),
