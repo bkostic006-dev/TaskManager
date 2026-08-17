@@ -1,6 +1,8 @@
 import { Transform } from 'class-transformer';
 import { IsEmail, IsString, MaxLength, MinLength } from 'class-validator';
 
+import { emailMessage } from './email-message';
+
 const PASSWORD_MAX_LENGTH = 128;
 
 /**
@@ -12,7 +14,7 @@ const PASSWORD_MAX_LENGTH = 128;
  * the length of a password that exists. Wrong credentials are always `401`.
  */
 export class LoginDto {
-  @IsEmail({}, { message: 'Enter a valid email address.' })
+  @IsEmail({}, { message: emailMessage })
   @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? value.trim().toLowerCase() : value,
   )
